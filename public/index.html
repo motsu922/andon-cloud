@@ -794,18 +794,25 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
 
     <!-- 送信完了 -->
     <div class="call-step" id="call-step-done">
-      <div style="text-align:center;padding:40px 20px;">
+      <div style="text-align:center;padding:32px 20px 16px;">
         <div style="font-size:64px;margin-bottom:16px;">✅</div>
         <div style="font-size:24px;font-weight:700;margin-bottom:8px;">送信しました</div>
-        <div style="color:var(--text2);margin-bottom:32px;" id="sent-summary"></div>
-        <button class="btn btn-primary btn-lg" onclick="callReset()">次の呼び出しへ</button>
+        <div style="color:var(--text2);margin-bottom:24px;" id="sent-summary"></div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn-chat" id="sent-chat-btn" style="font-size:14px;padding:10px 20px;display:none;"
+            onclick="openSentCaseChat()">💬 チャットを開く</button>
+          <button class="btn btn-primary btn-lg" onclick="callReset()">次の呼び出しへ</button>
+        </div>
       </div>
     </div>
 
-    <!-- 直近の呼び出し状況バー -->
-    <div class="call-summary-bar" id="call-summary-bar">
-      <div class="summary-item">現在の呼び出し: <span id="summary-active-count">0</span> 件</div>
-      <div class="summary-item">本日完了: <span id="summary-done-count">0</span> 件</div>
+    <!-- アクティブな呼び出し一覧（チャット付き） -->
+    <div style="padding:0 4px 8px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <span style="font-size:12px;color:var(--text2);">対応中: <span id="summary-active-count" style="color:var(--text);font-weight:700;">0</span> 件</span>
+        <span style="font-size:12px;color:var(--text2);">本日完了: <span id="summary-done-count" style="color:var(--text);font-weight:700;">0</span> 件</span>
+      </div>
+      <div id="call-active-list"></div>
     </div>
   </div>
 </div>
@@ -1330,10 +1337,11 @@ let currentUserDoc = null;
 let currentMode = null;  // 'call' | 'monitor' | 'mobile' | 'admin'
 
 // 呼び出し画面の選択状態
-let selectedProcess   = null;
-let selectedCallType  = null;
-let selectedDept      = null;
-let uploadedPhotoURL  = null;
+let selectedProcess     = null;
+let selectedCallType    = null;
+let selectedDept        = null;
+let uploadedPhotoURL    = null;
+let lastSubmittedCaseId = null;
 
 // リアルタイムリスナー解除用
 const unsubscribes = [];
@@ -1790,11 +1798,14 @@ async function loadCallTypes() {
 }
 
 async function loadDepartments() {
-  const snap = await tenantCol('departments').where('enabled','==',true).orderBy('order','asc').get();
+  const snap = await tenantCol('departments').orderBy('order','asc').get();
   const grid = document.getElementById('dept-grid');
   grid.innerHTML = '';
+  let count = 0;
   snap.forEach(doc => {
     const d = doc.data();
+    if (d.enabled === false) return; // 無効部署はスキップ
+    count++;
     const btn = document.createElement('div');
     btn.className = 'call-type-btn';
     btn.innerHTML = d.name + (d.isDefault ? '<span class="dept-badge">デフォルト</span>' : '');
@@ -1806,8 +1817,8 @@ async function loadDepartments() {
     });
     grid.appendChild(btn);
   });
-  // 部署が0件の場合はステップスキップ用にnullをセット
-  if (snap.empty) selectedDept = { id: null, name: '未指定' };
+  // 部署が0件の場合はステップスキップ
+  if (count === 0) selectedDept = { id: null, name: '未指定' };
 }
 
 function callGoStep(step) {
@@ -1882,12 +1893,15 @@ async function submitCall() {
       memo,
     });
 
-    document.getElementById('sent-summary').textContent =
-      `${selectedProcess.icon} ${selectedProcess.name} / ${selectedCallType.name}`;
-    if (selectedDept?.name) {
-      document.getElementById('sent-summary').textContent +=
-        ` → ${selectedDept.name}`;
-    }
+    const summaryText = `${selectedProcess.icon} ${selectedProcess.name} / ${selectedCallType.name}` +
+      (selectedDept?.name ? ` → ${selectedDept.name}` : '');
+    document.getElementById('sent-summary').textContent = summaryText;
+
+    // 送信完了画面にチャットボタンを表示
+    lastSubmittedCaseId = result.data.caseId;
+    const chatBtn = document.getElementById('sent-chat-btn');
+    chatBtn.style.display = 'inline-flex';
+    chatBtn.dataset.title = summaryText;
 
     callGoStep('done');
   } catch (e) {
@@ -1897,6 +1911,41 @@ async function submitCall() {
     btn.disabled = false;
     btn.innerHTML = '🔔 呼び出しを送信';
   }
+}
+
+function renderCallActiveList(docs) {
+  const list = document.getElementById('call-active-list');
+  if (!list) return;
+  if (docs.length === 0) { list.innerHTML = ''; return; }
+
+  list.innerHTML = '';
+  docs.forEach(doc => {
+    const d = doc.data();
+    const statusLabel = d.status === 'inprogress' ? '対応中' : '未対応';
+    const statusColor = d.status === 'inprogress' ? 'var(--success)' : 'var(--accent)';
+    const respondedInfo = d.respondedBy ? `<span style="color:var(--success);font-size:11px;">✅ ${d.respondedBy}</span>` : '';
+    const title = `${d.processName} / ${d.callTypeName}`;
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
+      padding:10px 14px; margin-bottom:6px; display:flex; align-items:center; gap:10px;`;
+    card.innerHTML = `
+      <span style="font-size:22px;">${d.processIcon || '🏭'}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;">${d.processName}
+          <span style="font-size:11px;color:var(--text2);font-weight:400;">/ ${d.callTypeName}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);">
+          <span style="color:${statusColor};">● ${statusLabel}</span>
+          ${d.assignedTo ? `　担当: ${d.assignedTo}` : ''}
+          ${respondedInfo}
+        </div>
+      </div>
+      <button class="btn-chat" style="white-space:nowrap;"
+        onclick="openChatModal('${doc.id}','${title.replace(/'/g,"\\'")}')">💬 チャット</button>`;
+    list.appendChild(card);
+  });
 }
 
 function callReset() {
@@ -1909,12 +1958,20 @@ function callReset() {
   callGoStep(1);
 }
 
+function openSentCaseChat() {
+  if (!lastSubmittedCaseId) return;
+  const btn = document.getElementById('sent-chat-btn');
+  openChatModal(lastSubmittedCaseId, btn.dataset.title || '呼び出し');
+}
+
 function subscribeCallSummary() {
   const today = new Date(); today.setHours(0,0,0,0);
   const unsub1 = tenantCol('cases')
     .where('status','in',['pending','inprogress'])
+    .orderBy('createdAt','desc')
     .onSnapshot(snap => {
       document.getElementById('summary-active-count').textContent = snap.size;
+      renderCallActiveList(snap.docs);
     });
   const unsub2 = tenantCol('cases')
     .where('status','==','completed')
@@ -1995,9 +2052,12 @@ function renderMonitor(docs) {
       <div class="case-card-meta">
         <div class="case-meta-item"><span>ライン: </span>${d.processLine || '—'}</div>
         <div class="case-meta-item"><span>発信: </span>${d.callerName || '—'}</div>
+        ${d.departmentName ? `<div class="case-meta-item"><span>呼び出し先: </span>${d.departmentName}</div>` : ''}
         ${d.assignedTo ? `<div class="case-meta-item"><span>担当: </span>${d.assignedTo}</div>` : ''}
         ${d.memo ? `<div class="case-meta-item"><span>メモ: </span>${d.memo}</div>` : ''}
-      </div>`;
+      </div>
+      ${d.photoURL ? `<img src="${d.photoURL}" onclick="viewPhoto('${d.photoURL}')"
+        style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;margin-top:10px;cursor:zoom-in;display:block;" alt="添付写真">` : ''}`;
     body.appendChild(card);
 
     // タイマー更新
@@ -2065,13 +2125,17 @@ function renderMobileList(containerId, docs, type) {
     const card = document.createElement('div');
     card.className = `mobile-case-card ${type}`;
     const deptLabel = d.departmentName ? `<span style="color:var(--accent);font-size:11px;">→ ${d.departmentName}</span>` : '';
-    const photoBtn  = d.photoURL ? `<button class="btn-chat" onclick="viewPhoto('${d.photoURL}')">📷 写真</button>` : '';
+    const photoThumb = d.photoURL
+      ? `<img src="${d.photoURL}" onclick="viewPhoto('${d.photoURL}')"
+           style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:zoom-in;display:block;"
+           alt="添付写真">`
+      : '';
     card.innerHTML = `
       <div class="mobile-case-process">${d.processIcon || '🏭'} ${d.processName} ${deptLabel}</div>
       <div class="mobile-case-type">${d.callTypeName}</div>
       <div class="mobile-case-meta">${d.processLine || ''} ${d.memo ? '— ' + d.memo : ''}</div>
-      <div class="mobile-case-actions" style="flex-wrap:wrap;gap:6px;">
-        ${photoBtn}
+      ${photoThumb}
+      <div class="mobile-case-actions" style="flex-wrap:wrap;gap:6px;margin-top:${d.photoURL ? '8px' : '0'};">
         <button class="btn-chat" onclick="openChatModal('${doc.id}','${(d.processName||'').replace(/'/g,"\\'")} / ${(d.callTypeName||'').replace(/'/g,"\\'")}')">💬 チャット</button>
         ${type === 'assigned'
           ? `<button class="btn btn-primary" onclick="respondCase('${doc.id}')">対応開始</button>
@@ -2255,7 +2319,7 @@ function adminTab(el, name) {
 
 // --- 部署管理 ---
 async function loadDeptsTable() {
-  const snap = await tenantCol('departments').orderBy('order','asc').get();
+  const snap = await tenantCol('departments').get();
   const tbody = document.getElementById('depts-tbody');
   tbody.innerHTML = '';
   snap.forEach(doc => {
