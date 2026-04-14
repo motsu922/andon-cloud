@@ -86,11 +86,27 @@ service cloud.firestore {
       // 改善アクション
       // ------------------------------------------
       match /improvements/{docId} {
-        // メンバーなら読み取り可（分析画面で参照）
         allow read: if isMember(tenantId);
-
-        // 管理者のみ作成・更新・削除可
         allow write: if isAdmin(tenantId);
+      }
+
+      // ------------------------------------------
+      // 部署
+      // ------------------------------------------
+      match /departments/{docId} {
+        allow read: if isMember(tenantId);
+        allow write: if isAdmin(tenantId);
+      }
+
+      // ------------------------------------------
+      // 案件内チャットメッセージ
+      // ------------------------------------------
+      match /cases/{caseId}/messages/{msgId} {
+        allow read: if isMember(tenantId);
+        // メンバーが直接書き込み可（チャット用途）
+        allow create: if isMember(tenantId)
+          && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if false;
       }
     }
 

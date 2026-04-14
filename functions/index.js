@@ -64,7 +64,7 @@ async function checkPlanLimit(tenantId, resource) {
 //    バリデーション・プラン制限・Push送信をサーバー側で実行
 // =============================================
 exports.createCase = onCall({ region: "asia-northeast1" }, async (req) => {
-  const { tenantId, processId, callTypeName, memo, priority } = req.data;
+  const { tenantId, processId, callTypeName, memo, priority, departmentId, departmentName, photoURL } = req.data;
 
   // 認証・メンバー確認
   const caller = await assertMember(req.auth, tenantId);
@@ -87,14 +87,17 @@ exports.createCase = onCall({ region: "asia-northeast1" }, async (req) => {
 
   // Firestoreに案件を作成
   const ref = await db.collection(`tenants/${tenantId}/cases`).add({
-    status:       "pending",
-    priority:     priority || "normal",
+    status:           "pending",
+    priority:         priority || "normal",
     processId,
-    processName:  process.name,
-    processLine:  process.line || "",
-    processIcon:  process.icon || "🏭",
-    callTypeName: callTypeName || "呼び出し",
-    memo:         memo || "",
+    processName:      process.name,
+    processLine:      process.line || "",
+    processIcon:      process.icon || "🏭",
+    callTypeName:     callTypeName || "呼び出し",
+    departmentId:     departmentId || null,
+    departmentName:   departmentName || null,
+    photoURL:         photoURL || null,
+    memo:             memo || "",
     callerUid:        req.auth.uid,
     callerName:       caller.name || req.auth.token?.email || "不明",
     createdAt:        FieldValue.serverTimestamp(),
@@ -109,8 +112,8 @@ exports.createCase = onCall({ region: "asia-northeast1" }, async (req) => {
     declinedBy:       [],
   });
 
-  // Push通知を全担当者に送信（非同期・失敗してもケース作成は成功扱い）
-  sendPushToAllMembers(tenantId, ref.id, process.name, callTypeName).catch(console.error);
+  // Push通知：部署指定があればその部署メンバーへ、なければ全員へ
+  sendPushToMembers(tenantId, ref.id, process.name, callTypeName, departmentId).catch(console.error);
 
   return { caseId: ref.id };
 });
@@ -263,7 +266,7 @@ exports.declineCase = onCall({ region: "asia-northeast1" }, async (req) => {
 //    Admin SDKを持つFunctions側で実行
 // =============================================
 exports.createMember = onCall({ region: "asia-northeast1" }, async (req) => {
-  const { tenantId, name, email, password, role } = req.data;
+  const { tenantId, name, email, password, role, departmentId, departmentName } = req.data;
 
   // 管理者チェック
   await assertAdmin(req.auth, tenantId);
@@ -278,12 +281,14 @@ exports.createMember = onCall({ region: "asia-northeast1" }, async (req) => {
   await db.doc(`tenants/${tenantId}/users/${userRecord.uid}`).set({
     name,
     email,
-    role:      role || "member",
-    enabled:   true,
-    available: true,
-    priority:  50,
-    fcmToken:  null,
-    createdAt: FieldValue.serverTimestamp(),
+    role:           role || "member",
+    enabled:        true,
+    available:      true,
+    priority:       50,
+    fcmToken:       null,
+    departmentId:   departmentId || null,
+    departmentName: departmentName || null,
+    createdAt:      FieldValue.serverTimestamp(),
   });
 
   return { uid: userRecord.uid };
@@ -366,23 +371,45 @@ exports.initTenant = onCall({ region: "asia-northeast1" }, async (req) => {
     });
   }
 
+  // デフォルト部署を追加
+  const defaultDepts = [
+    { name: "生技・品質", order: 1, isDefault: true },
+    { name: "製造",       order: 2, isDefault: false },
+    { name: "設備保全",   order: 3, isDefault: false },
+  ];
+  for (const dept of defaultDepts) {
+    await db.collection(`tenants/${tenantId}/departments`).add({
+      ...dept, enabled: true, createdAt: FieldValue.serverTimestamp()
+    });
+  }
+
   return { ok: true, tenantId };
 });
 
 // =============================================
 // Push通知ヘルパー（内部使用）
 // =============================================
-async function sendPushToAllMembers(tenantId, caseId, processName, callTypeName) {
-  const membersSnap = await db.collection(`tenants/${tenantId}/users`)
+async function sendPushToMembers(tenantId, caseId, processName, callTypeName, departmentId) {
+  // 部署指定あり → その部署のメンバー優先。なければ全員にフォールバック
+  let query = db.collection(`tenants/${tenantId}/users`)
     .where("enabled", "==", true)
-    .where("available", "==", true)
-    .get();
+    .where("available", "==", true);
 
-  const tokens = membersSnap.docs
-    .map(d => d.data().fcmToken)
-    .filter(Boolean);
+  let membersSnap = await query.get();
 
-  if (tokens.length === 0) return;
+  // 部署フィルタリング（クライアント側で）
+  let targets = membersSnap.docs;
+  if (departmentId) {
+    const deptTargets = targets.filter(d => d.data().departmentId === departmentId);
+    if (deptTargets.length > 0) targets = deptTargets;
+    // 対象がいなければ全員にフォールバック
+  }
+
+  const tokensWithDocs = targets
+    .map(d => ({ token: d.data().fcmToken, doc: d }))
+    .filter(t => t.token);
+
+  if (tokensWithDocs.length === 0) return;
 
   const message = {
     notification: {
@@ -390,7 +417,7 @@ async function sendPushToAllMembers(tenantId, caseId, processName, callTypeName)
       body:  callTypeName,
     },
     data: { tenantId, caseId },
-    tokens,
+    tokens: tokensWithDocs.map(t => t.token),
   };
 
   const result = await fcm.sendEachForMulticast(message);
@@ -398,8 +425,7 @@ async function sendPushToAllMembers(tenantId, caseId, processName, callTypeName)
   // 無効なトークンを削除
   result.responses.forEach(async (res, i) => {
     if (!res.success && res.error?.code === "messaging/registration-token-not-registered") {
-      const memberDoc = membersSnap.docs[i];
-      await memberDoc.ref.update({ fcmToken: null });
+      await tokensWithDocs[i].doc.ref.update({ fcmToken: null });
     }
   });
 }
