@@ -708,6 +708,42 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
   box-shadow: 0 0 0 4px var(--accent), 0 0 0 6px rgba(245,158,11,.3);
   border-radius: 8px;
 }
+
+/* =============================================
+   ？バッジ（ヘルプツールチップ）
+============================================= */
+.help-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text2); font-size: 10px; font-weight: 700;
+  cursor: pointer; vertical-align: middle; margin-left: 5px;
+  flex-shrink: 0; transition: all .15s; line-height: 1; font-style: normal;
+  position: relative; top: -1px;
+}
+.help-badge:hover, .help-badge.open {
+  background: var(--accent); color: #0d0f14; border-color: var(--accent);
+}
+.help-popup {
+  position: fixed; z-index: 9500;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 10px 14px;
+  font-size: 12px; color: var(--text); line-height: 1.6;
+  max-width: 240px; box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  animation: help-pop .15s ease;
+  pointer-events: none;
+}
+.help-popup::before {
+  content: ''; position: absolute;
+  top: -7px; left: 14px;
+  border: 6px solid transparent;
+  border-bottom-color: var(--accent);
+  border-top: none;
+}
+@keyframes help-pop {
+  from { opacity:0; transform: translateY(-4px) scale(.95); }
+  to   { opacity:1; transform: translateY(0) scale(1); }
+}
 </style>
 </head>
 <body>
@@ -955,9 +991,12 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
         <span id="mobile-dept-label">部署未設定 ▸ タップして設定</span>
       </button>
     </div>
-    <div class="mobile-available-toggle off" id="avail-toggle" onclick="toggleAvailable()">
-      <div class="dot"></div>
-      <span id="avail-label">待機中</span>
+    <div style="display:flex;align-items:center;gap:4px;">
+      <div class="mobile-available-toggle off" id="avail-toggle" onclick="toggleAvailable()">
+        <div class="dot"></div>
+        <span id="avail-label">待機中</span>
+      </div>
+      <i class="help-badge" style="flex-shrink:0;" id="avail-help-badge">?</i>
     </div>
   </div>
   <div class="mobile-body" id="mobile-body">
@@ -1513,6 +1552,173 @@ function tenantDoc(path) {
 }
 
 // =============================================
+// ？バッジ ヘルプツールチップ
+// =============================================
+let _helpPopup = null;
+let _helpBadgeOpen = null;
+
+// バッジを生成して返す
+function helpBadge(text) {
+  const b = document.createElement('i');
+  b.className = 'help-badge';
+  b.textContent = '?';
+  b.setAttribute('aria-label', text);
+  b.addEventListener('click',   e => { e.stopPropagation(); toggleHelpPopup(b, text); });
+  b.addEventListener('mouseenter', () => openHelpPopup(b, text));
+  b.addEventListener('mouseleave', () => closeHelpPopup());
+  return b;
+}
+
+function openHelpPopup(badge, text) {
+  closeHelpPopup();
+  badge.classList.add('open');
+  _helpBadgeOpen = badge;
+  const popup = document.createElement('div');
+  popup.className = 'help-popup';
+  popup.textContent = text;
+  document.body.appendChild(popup);
+  _helpPopup = popup;
+
+  const rect = badge.getBoundingClientRect();
+  // 画面右端をはみ出さないように調整
+  const left = Math.min(rect.left + window.scrollX, window.innerWidth - 260);
+  popup.style.top  = (rect.bottom + window.scrollY + 8) + 'px';
+  popup.style.left = Math.max(8, left) + 'px';
+}
+
+function closeHelpPopup() {
+  if (_helpPopup)      { _helpPopup.remove();            _helpPopup = null; }
+  if (_helpBadgeOpen)  { _helpBadgeOpen.classList.remove('open'); _helpBadgeOpen = null; }
+}
+
+function toggleHelpPopup(badge, text) {
+  if (_helpBadgeOpen === badge) { closeHelpPopup(); }
+  else { openHelpPopup(badge, text); }
+}
+
+// 画面タップで閉じる
+document.addEventListener('click', () => closeHelpPopup());
+
+// label要素にバッジを差し込む（呼び出し側から使う）
+// usage: appendHelpTo('#some-label', 'ここに説明文')
+function appendHelpTo(selector, text) {
+  const el = typeof selector === 'string' ? document.querySelector(selector) : selector;
+  if (!el || el.querySelector('.help-badge')) return;
+  el.appendChild(helpBadge(text));
+}
+
+// 各画面の全バッジを初期化
+function initHelpBadges() {
+  // --- ログイン画面 ---
+  appendHelpTo('#screen-login label[for], #screen-login .field label:first-of-type, #screen-login .field > label', 'ログイン情報を入力してください');
+  document.querySelectorAll('#screen-login .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      'URLの ?tenant=xxx の xxx に当たるテナントIDです',
+      '管理者またはメンバーのメールアドレスを入力してください',
+      'アカウントのパスワードを入力してください',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+
+  // --- 呼び出し画面 ---
+  appendHelpTo('#call-step-1 .call-step-title', 'あなたが作業している工程（ライン）を選んでください');
+  appendHelpTo('#call-step-2 .call-step-title', '発生している問題の種類を選んでください');
+  appendHelpTo('#call-step-3 .call-step-title', '呼び出したい担当部署を選んでください。スキップも可能です');
+  appendHelpTo('[for="call-memo"], #call-step-4 .confirm-row:nth-child(5) .confirm-label', '担当者への補足情報を入力できます（任意）');
+  appendHelpTo('#call-step-4 .confirm-row:nth-child(6) .confirm-label', '現場の状況写真を添付できます（任意・10MB以内）');
+
+  // --- モバイル画面 ---
+  const availBadge = document.getElementById('avail-help-badge');
+  if (availBadge) {
+    availBadge.addEventListener('click',     e => { e.stopPropagation(); toggleHelpPopup(availBadge, '「対応可」にすると呼び出しが割り当てられます。出勤時はON、離席・休憩時はOFFにしてください'); });
+    availBadge.addEventListener('mouseenter', () => openHelpPopup(availBadge, '「対応可」にすると呼び出しが割り当てられます。出勤時はON、離席・休憩時はOFFにしてください'));
+    availBadge.addEventListener('mouseleave', () => closeHelpPopup());
+  }
+  appendHelpTo('#mobile-dept-btn span', 'あなたの所属部署です。この部署への呼び出し通知のみ受け取ります');
+
+  // --- 管理画面：テナント設定 ---
+  appendHelpTo('#tab-tenant label:nth-of-type(1)', 'アプリ上に表示される会社・工場の名前です');
+  appendHelpTo('#tab-tenant label:nth-of-type(2)', '変更できない固有のIDです。URLの ?tenant=xxx に使われます');
+  appendHelpTo('#tab-tenant label:nth-of-type(3)', '現在のご契約プランです。変更は開発元へお問い合わせください');
+
+  // --- モーダル：メンバー追加 ---
+  document.querySelectorAll('#modal-member .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      'メンバーの表示名です。担当者画面・呼び出し一覧に表示されます',
+      'ログインに使うメールアドレスです',
+      '初回ログイン用のパスワードです。メンバー自身が後で変更できます',
+      'adminは管理画面にアクセスできます。通常はmemberを選択してください',
+      'このメンバーが受け取る呼び出し通知の対象部署です',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+
+  // --- モーダル：メンバー編集 ---
+  document.querySelectorAll('#modal-edit-member .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      '担当者の表示名です',
+      'adminは管理画面にアクセスできます。通常はmemberを選択してください',
+      'このメンバーが受け取る通知の対象部署です',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+
+  // --- モーダル：工程追加 ---
+  document.querySelectorAll('#modal-process .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      '呼び出し画面に表示される工程名です（例：組立、塗装）',
+      '同じ工程に複数ラインがある場合に入力します（例：Aライン）',
+      '呼び出しボタンに表示される絵文字です（例：🔧🏭）',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+
+  // --- モーダル：呼び出し種別追加 ---
+  document.querySelectorAll('#modal-calltype .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      '呼び出しの内容を表す名前です（例：品質確認、設備故障）',
+      '緊急はアラート色で強調表示されます。通常は通常を選んでください',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+
+  // --- モーダル：部署追加 ---
+  document.querySelectorAll('#modal-dept .field, #modal-dept > .modal-box > *').forEach(field => {
+    const lbl = field.querySelector ? field.querySelector('label') : null;
+    if (!lbl) return;
+    if (lbl.textContent.includes('部署名')) appendHelpTo(lbl, '担当部署の名前です（例：生技・品質、設備保全）');
+    if (lbl.textContent.includes('デフォルト')) appendHelpTo(lbl, '呼び出し画面のStep3で最初に選択される部署になります');
+  });
+
+  // --- モーダル：プロフィール（モバイル） ---
+  const deptSelectNameLbl = document.querySelector('#modal-dept-select .field label');
+  if (deptSelectNameLbl) appendHelpTo(deptSelectNameLbl, '呼び出し一覧や担当割り当てに表示される名前です');
+  const deptSelectDeptLbl = document.querySelector('#modal-dept-select > .modal-box > label');
+  if (deptSelectDeptLbl) appendHelpTo(deptSelectDeptLbl, 'あなたが担当する部署を選んでください。この部署への呼び出しのみ通知が届きます');
+
+  // --- モーダル：対応完了 ---
+  document.querySelectorAll('#modal-complete .field').forEach((field, i) => {
+    const lbl = field.querySelector('label');
+    if (!lbl) return;
+    const tips = [
+      '実際に行った対応の内容を記録します（任意）',
+      '同じ問題の再発防止に活用されます。分析画面で確認できます',
+    ];
+    if (tips[i]) appendHelpTo(lbl, tips[i]);
+  });
+}
+
+// =============================================
 // テーマ管理
 // =============================================
 const THEMES = ['dark','mid','light'];
@@ -1686,6 +1892,7 @@ function runAdminGuide() {
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initGuideBtn();
+  initHelpBadges();
   tenantId = getTenantIdFromURL();
   currentMode = getModeFromURL();
 
