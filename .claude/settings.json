@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(firebase:*)",
+      "Bash(npm:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(echo:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'firestore.rules' && grep -q 'cases.*write.*true\\|users.*write.*true'; then echo '{\"block\": true, \"message\": \"cases/users への write 許可は禁止されています（Lv2セキュリティルール）\"}' >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'functions/index.js'; then echo '✅ functions/index.js を変更しました。firebase deploy --only functions でデプロイしてください'; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "FIREBASE_PROJECT": "YOUR_PROJECT_ID"
+  }
+}

@@ -1,0 +1,26 @@
+# 依存パッケージ（大容量・不要）
+node_modules/
+functions/node_modules/
+
+# ビルド成果物
+.firebase/
+dist/
+
+# 環境変数・シークレット（絶対に読ませない）
+.env
+.env.*
+*.pem
+*.key
+serviceAccountKey.json
+firebase-debug.log
+
+# OS・エディタ生成ファイル
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+
+# Firebase内部ファイル
+firebase-export-*/
+firestore-debug.log
+ui-debug.log

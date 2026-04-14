@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Andon Cloud</title>
+
+<!-- Firebase Compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
+
+<style>
+/* =============================================
+   CSS変数・リセット
+============================================= */
+:root {
+  --bg:        #0d0f14;
+  --surface:   #161a23;
+  --surface2:  #1e2330;
+  --border:    #2a3040;
+  --accent:    #f59e0b;
+  --accent2:   #3b82f6;
+  --danger:    #ef4444;
+  --success:   #22c55e;
+  --text:      #e8eaf0;
+  --text2:     #8892a4;
+  --font:      'DM Sans', 'Noto Sans JP', sans-serif;
+  --mono:      'DM Mono', monospace;
+  --r:         8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+
+/* =============================================
+   共通コンポーネント
+============================================= */
+.screen { display: none; min-height: 100dvh; }
+.screen.active { display: flex; flex-direction: column; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 20px; border-radius: var(--r); border: none; cursor: pointer;
+  font-family: var(--font); font-size: 14px; font-weight: 500;
+  transition: all .15s; white-space: nowrap;
+}
+.btn-primary  { background: var(--accent);  color: #0d0f14; }
+.btn-primary:hover  { background: #fbbf24; }
+.btn-danger   { background: var(--danger);  color: #fff; }
+.btn-danger:hover   { opacity: .85; }
+.btn-ghost    { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover    { border-color: var(--accent); color: var(--accent); }
+.btn-success  { background: var(--success); color: #fff; }
+.btn:disabled { opacity: .4; pointer-events: none; }
+.btn-lg       { padding: 14px 28px; font-size: 16px; }
+.btn-xl       { padding: 20px 36px; font-size: 20px; font-weight: 700; border-radius: 12px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px;
+}
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 100px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+}
+.badge-pending   { background: #f59e0b22; color: var(--accent); }
+.badge-active    { background: #3b82f622; color: var(--accent2); }
+.badge-done      { background: #22c55e22; color: var(--success); }
+
+input, select, textarea {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r); color: var(--text);
+  font-family: var(--font); font-size: 14px;
+  padding: 10px 14px; width: 100%;
+  transition: border-color .15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px 20px;
+  font-size: 14px; box-shadow: 0 8px 32px #0006;
+  animation: toastIn .2s ease;
+}
+@keyframes toastIn { from { transform: translateY(20px); opacity:0; } }
+
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .7s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* =============================================
+   ① ログイン画面
+============================================= */
+#screen-login {
+  align-items: center; justify-content: center; padding: 24px;
+  background: radial-gradient(ellipse at 50% 0%, #1a2035 0%, var(--bg) 70%);
+}
+
+.login-box {
+  width: 100%; max-width: 400px;
+}
+
+.login-logo {
+  text-align: center; margin-bottom: 40px;
+}
+.login-logo .logo-mark {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 26px; font-weight: 700; letter-spacing: -.02em;
+}
+.login-logo .logo-mark span.dot {
+  display: inline-block; width: 10px; height: 10px;
+  background: var(--accent); border-radius: 50%;
+  box-shadow: 0 0 12px var(--accent);
+}
+.login-logo .tagline {
+  font-size: 12px; color: var(--text2); margin-top: 8px; letter-spacing: .08em;
+}
+
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.login-form .field { display: flex; flex-direction: column; gap: 6px; }
+
+.login-error {
+  background: #ef444422; border: 1px solid #ef444466;
+  border-radius: var(--r); padding: 10px 14px;
+  font-size: 13px; color: #fca5a5; display: none;
+}
+
+.tenant-hint {
+  text-align: center; margin-top: 20px;
+  font-size: 12px; color: var(--text2);
+}
+.tenant-hint strong { color: var(--accent); font-family: var(--mono); }
+
+/* =============================================
+   ② 呼び出し画面（タブレット・PC設置用）
+============================================= */
+#screen-call {
+  flex-direction: column;
+}
+
+.call-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+}
+.call-header .logo { font-size: 16px; font-weight: 700; }
+.call-header .tenant-name { color: var(--text2); font-size: 13px; }
+.call-header .spacer { flex: 1; }
+.call-header .status-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.call-body { flex: 1; display: flex; flex-direction: column; padding: 24px; gap: 24px; }
+
+.call-step { display: none; }
+.call-step.active { display: flex; flex-direction: column; gap: 16px; }
+
+.call-step-label {
+  font-size: 12px; color: var(--text2); letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.call-step-title { font-size: 22px; font-weight: 700; }
+
+.process-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+}
+.process-btn {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; padding: 20px 16px; cursor: pointer;
+  transition: all .15s; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.process-btn:hover, .process-btn.selected {
+  border-color: var(--accent); background: #f59e0b0a;
+}
+.process-btn .process-icon { font-size: 28px; }
+.process-btn .process-name { font-size: 14px; font-weight: 600; }
+.process-btn .process-line { font-size: 11px; color: var(--text2); }
+
+.call-type-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
+}
+.call-type-btn {
+  padding: 16px; border-radius: 10px; cursor: pointer; text-align: center;
+  border: 2px solid var(--border); background: var(--surface);
+  font-size: 14px; font-weight: 600; transition: all .15s;
+}
+.call-type-btn:hover, .call-type-btn.selected { border-color: var(--danger); background: #ef44440a; }
+
+.call-confirm-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 12px;
+}
+.confirm-row { display: flex; gap: 12px; align-items: center; }
+.confirm-label { font-size: 12px; color: var(--text2); min-width: 80px; }
+.confirm-value { font-size: 15px; font-weight: 600; }
+
+.call-actions { display: flex; gap: 12px; margin-top: 8px; }
+
+.call-summary-bar {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px 20px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.summary-item { font-size: 13px; }
+.summary-item span { color: var(--text2); }
+
+/* =============================================
+   ③ モニター画面（大型ディスプレイ用）
+============================================= */
+#screen-monitor {
+  flex-direction: column; background: var(--bg);
+}
+
+.monitor-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 16px 32px; display: flex; align-items: center; gap: 20px;
+}
+.monitor-header .logo { font-size: 20px; font-weight: 700; }
+.monitor-header .clock {
+  font-family: var(--mono); font-size: 24px; font-weight: 500; color: var(--accent);
+}
+.monitor-header .spacer { flex: 1; }
+.monitor-header .header-stat { text-align: right; }
+.monitor-header .header-stat .num { font-size: 28px; font-weight: 700; line-height: 1; }
+.monitor-header .header-stat .lbl { font-size: 10px; color: var(--text2); letter-spacing: .08em; }
+
+.monitor-body {
+  flex: 1; padding: 24px 32px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px; align-content: start;
+  overflow-y: auto;
+}
+
+.monitor-empty {
+  grid-column: 1 / -1; text-align: center;
+  padding: 80px 20px; color: var(--text2);
+}
+.monitor-empty .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: .3; }
+.monitor-empty .empty-msg { font-size: 18px; }
+
+.case-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px;
+  border-left: 4px solid transparent;
+  animation: cardIn .3s ease;
+}
+@keyframes cardIn { from { opacity:0; transform: translateY(8px); } }
+
+.case-card.status-pending   { border-left-color: var(--accent); }
+.case-card.status-inprogress { border-left-color: var(--accent2); }
+
+.case-card-top {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;
+}
+.case-card-info { flex: 1; }
+.case-card-process { font-size: 18px; font-weight: 700; }
+.case-card-type { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+.case-card-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;
+}
+.case-meta-item { font-size: 12px; }
+.case-meta-item span { color: var(--text2); }
+
+.case-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+.elapsed-timer {
+  font-family: var(--mono); font-size: 20px; font-weight: 700;
+  color: var(--accent); text-align: right;
+}
+.elapsed-timer.warning { color: var(--danger); animation: blink 1s ease infinite; }
+@keyframes blink { 50% { opacity: .4; } }
+
+/* =============================================
+   ④ 担当者画面（スマホ用）
+============================================= */
+#screen-mobile {
+  flex-direction: column; max-width: 480px; margin: 0 auto; width: 100%;
+}
+
+.mobile-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 16px 20px; display: flex; align-items: center; gap: 12px;
+}
+.mobile-header .logo { font-size: 16px; font-weight: 700; flex: 1; }
+.mobile-header .user-name { font-size: 13px; color: var(--text2); }
+.mobile-available-toggle {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 100px; padding: 6px 14px; cursor: pointer;
+  font-size: 13px; font-weight: 500; transition: all .15s;
+}
+.mobile-available-toggle.on { border-color: var(--success); color: var(--success); background: #22c55e11; }
+.mobile-available-toggle .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--text2);
+}
+.mobile-available-toggle.on .dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+.mobile-body { flex: 1; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+
+.mobile-section-label {
+  font-size: 11px; color: var(--text2); letter-spacing: .1em;
+  text-transform: uppercase; padding: 4px 0;
+}
+
+.mobile-case-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; border-left: 4px solid transparent;
+  animation: cardIn .3s ease;
+}
+.mobile-case-card.assigned { border-left-color: var(--accent); background: #f59e0b05; }
+.mobile-case-card.inprogress { border-left-color: var(--accent2); }
+
+.mobile-case-process { font-size: 17px; font-weight: 700; }
+.mobile-case-type { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.mobile-case-meta { font-size: 12px; color: var(--text2); margin-top: 8px; }
+.mobile-case-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.push-notice {
+  background: #3b82f611; border: 1px solid #3b82f644;
+  border-radius: var(--r); padding: 12px 16px;
+  font-size: 13px; text-align: center;
+}
+
+/* =============================================
+   ⑤ 管理画面
+============================================= */
+#screen-admin { flex-direction: column; }
+
+.admin-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+}
+.admin-header .logo { font-size: 16px; font-weight: 700; flex: 1; }
+
+.admin-nav {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; padding: 0 24px; gap: 0;
+}
+.admin-nav-item {
+  padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--text2); border-bottom: 2px solid transparent; transition: all .15s;
+}
+.admin-nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.admin-body { flex: 1; padding: 24px; overflow-y: auto; }
+
+.admin-tab { display: none; flex-direction: column; gap: 20px; }
+.admin-tab.active { display: flex; }
+
+.admin-section-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+.admin-section-title { font-size: 16px; font-weight: 700; flex: 1; }
+
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: left;
+}
+.data-table th { color: var(--text2); font-weight: 500; font-size: 11px; letter-spacing: .06em; }
+
+.member-row-available { display: inline-flex; align-items: center; gap: 6px; }
+.dot-on  { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.dot-off { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+
+/* モーダル */
+.modal-backdrop {
+  position: fixed; inset: 0; background: #0009; z-index: 1000;
+  display: none; align-items: center; justify-content: center; padding: 24px;
+}
+.modal-backdrop.open { display: flex; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px; width: 100%; max-width: 440px;
+  max-height: 90dvh; overflow-y: auto;
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+.modal-fields { display: flex; flex-direction: column; gap: 14px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* QRコード招待 */
+.qr-area { text-align: center; padding: 24px; }
+.qr-area canvas { border: 2px solid var(--border); border-radius: var(--r); }
+.qr-url { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-top: 8px; word-break: break-all; }
+
+/* =============================================
+   ローディング
+============================================= */
+#screen-loading {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100dvh; flex-direction: column; gap: 16px;
+}
+#screen-loading.active { display: flex; }
+#screen-loading .logo { font-size: 24px; font-weight: 700; }
+
+/* =============================================
+   レスポンシブ
+============================================= */
+@media (max-width: 600px) {
+  .process-grid { grid-template-columns: repeat(2, 1fr); }
+  .call-type-grid { grid-template-columns: repeat(2, 1fr); }
+  .monitor-body { padding: 16px; grid-template-columns: 1fr; }
+  .admin-body { padding: 16px; }
+}
+
+/* =============================================
+   ⑥ 分析・改善タブ（管理画面内）
+============================================= */
+
+/* サマリーカード */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px;
+}
+.stat-card .stat-value { font-size: 28px; font-weight: 700; line-height: 1; color: var(--accent); }
+.stat-card .stat-label { font-size: 11px; color: var(--text2); margin-top: 6px; letter-spacing: .04em; }
+.stat-card .stat-sub   { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+/* チャートグリッド */
+.chart-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;
+}
+@media (max-width: 700px) { .chart-grid { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; margin-bottom: 0;
+}
+.chart-title {
+  font-size: 11px; font-weight: 700; color: var(--text2);
+  letter-spacing: .08em; text-transform: uppercase; margin-bottom: 14px;
+}
+
+/* トレンドバーチャート */
+.trend-chart { display: flex; align-items: flex-end; gap: 2px; height: 80px; }
+.trend-bar {
+  flex: 1; background: var(--accent); border-radius: 2px 2px 0 0;
+  min-height: 2px; cursor: default; position: relative;
+}
+.trend-bar .trend-tip {
+  position: absolute; bottom: 105%; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 7px; font-size: 10px; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 5;
+}
+.trend-bar:hover .trend-tip { opacity: 1; }
+.trend-bar:hover { opacity: .75; }
+.trend-labels { display: flex; gap: 2px; margin-top: 4px; }
+.trend-label { flex: 1; font-size: 8px; color: var(--text2); text-align: center; }
+
+/* ヒートマップ */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap-row { display: flex; align-items: center; gap: 2px; margin-bottom: 2px; }
+.heatmap-row-label {
+  font-size: 10px; color: var(--text2); min-width: 72px; max-width: 72px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: right; padding-right: 6px; flex-shrink: 0;
+}
+.heatmap-hour-label { width: 18px; font-size: 8px; color: var(--text2); text-align: center; flex-shrink: 0; }
+.heatmap-cell {
+  width: 18px; height: 18px; border-radius: 2px; flex-shrink: 0;
+  background: var(--surface2); border: 1px solid var(--border);
+  position: relative; cursor: default;
+}
+.heatmap-cell .heatmap-tip {
+  position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 6px; font-size: 10px; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 10;
+}
+.heatmap-cell:hover .heatmap-tip { opacity: 1; }
+
+/* ランキング */
+.rank-list { display: flex; flex-direction: column; gap: 10px; }
+.rank-item { display: flex; align-items: center; gap: 8px; }
+.rank-num { font-size: 11px; color: var(--text2); min-width: 16px; text-align: right; font-family: var(--mono); }
+.rank-bar-wrap { flex: 1; }
+.rank-bar-label { font-size: 12px; margin-bottom: 3px; }
+.rank-bar-track { height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.rank-bar-fill { height: 100%; border-radius: 3px; background: var(--accent2); }
+.rank-count { font-size: 12px; font-family: var(--mono); color: var(--text2); min-width: 28px; text-align: right; }
+
+/* 根本原因バー */
+.rc-list { display: flex; flex-direction: column; gap: 10px; }
+.rc-label { font-size: 12px; margin-bottom: 3px; display: flex; justify-content: space-between; }
+.rc-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.rc-fill  { height: 100%; border-radius: 3px; background: var(--accent); }
+
+/* 改善アクションカード */
+.improvement-list { display: flex; flex-direction: column; gap: 12px; }
+.improvement-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px; border-left: 4px solid var(--border);
+}
+.improvement-card.status-planning  { border-left-color: var(--text2); }
+.improvement-card.status-doing     { border-left-color: var(--accent); }
+.improvement-card.status-verifying { border-left-color: var(--accent2); }
+.improvement-card.status-closed    { border-left-color: var(--success); opacity: .75; }
+.improvement-header  { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.improvement-target  { font-size: 14px; font-weight: 700; flex: 1; }
+.improvement-action  { font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+.improvement-meta    { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-bottom: 10px; }
+.improvement-effect  {
+  background: var(--surface2); border-radius: var(--r); padding: 8px 12px;
+  display: flex; gap: 14px; align-items: center; margin-bottom: 10px; font-size: 12px;
+}
+.effect-value        { font-size: 20px; font-weight: 700; color: var(--success); }
+.effect-value.bad    { color: var(--danger); }
+.improvement-actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.badge-status-planning   { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.badge-status-doing      { background: #f59e0b22; color: var(--accent);  border: 1px solid #f59e0b44; }
+.badge-status-verifying  { background: #3b82f622; color: var(--accent2); border: 1px solid #3b82f644; }
+.badge-status-closed     { background: #22c55e22; color: var(--success); border: 1px solid #22c55e44; }
+
+/* フィルタータブ */
+.filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.filter-tab {
+  padding: 4px 14px; border-radius: 100px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); color: var(--text2); transition: all .15s;
+}
+.filter-tab.active { border-color: var(--accent); color: var(--accent); background: #f59e0b11; }
+
+/* 期間ボタン */
+.period-selector { display: flex; gap: 6px; }
+.period-btn {
+  padding: 4px 12px; border-radius: 100px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); color: var(--text2); background: transparent; transition: all .15s;
+}
+.period-btn.active { border-color: var(--accent2); color: var(--accent2); background: #3b82f611; }
+
+/* 完了モーダル 根本原因グリッド */
+.root-cause-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.rc-option {
+  padding: 10px 8px; border-radius: var(--r); cursor: pointer;
+  border: 1px solid var(--border); text-align: center; font-size: 13px; transition: all .15s;
+}
+.rc-option:hover, .rc-option.selected { border-color: var(--accent); background: #f59e0b11; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ローディング -->
+<div id="screen-loading" class="screen active">
+  <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+</div>
+
+<!-- ① ログイン画面 -->
+<div id="screen-login" class="screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="logo-mark">
+        <span class="dot"></span>Andon Cloud
+      </div>
+      <div class="tagline">FACTORY CALL MANAGEMENT SYSTEM</div>
+    </div>
+
+    <div class="card login-form">
+      <div id="tenant-badge" style="margin-bottom:12px;display:none;">
+        <label>テナント</label>
+        <div style="font-weight:700;font-size:16px;" id="tenant-display"></div>
+      </div>
+      <div class="field">
+        <label>メールアドレス</label>
+        <input type="email" id="login-email" placeholder="user@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>パスワード</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <button class="btn btn-primary btn-lg" onclick="doLogin()" id="login-btn">ログイン</button>
+    </div>
+
+    <div class="tenant-hint" id="no-tenant-hint" style="display:none;">
+      URLに <strong>?tenant=テナントID</strong> が必要です
+    </div>
+  </div>
+</div>
+
+<!-- ② 呼び出し画面 -->
+<div id="screen-call" class="screen">
+  <div class="call-header">
+    <div class="status-dot"></div>
+    <div class="logo">Andon Cloud</div>
+    <div class="tenant-name" id="call-tenant-name"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" style="font-size:12px;" onclick="signOutUser()">ログアウト</button>
+  </div>
+
+  <div class="call-body">
+    <!-- Step 1: 工程選択 -->
+    <div class="call-step active" id="call-step-1">
+      <div class="call-step-label">Step 1 / 3</div>
+      <div class="call-step-title">工程を選んでください</div>
+      <div class="process-grid" id="process-grid"></div>
+    </div>
+
+    <!-- Step 2: 呼び出し種別 -->
+    <div class="call-step" id="call-step-2">
+      <div class="call-step-label">Step 2 / 3</div>
+      <div class="call-step-title">呼び出し内容を選んでください</div>
+      <div class="call-type-grid" id="call-type-grid"></div>
+      <div style="margin-top:8px;">
+        <button class="btn btn-ghost" onclick="callGoStep(1)">← 工程を選び直す</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 確認・送信 -->
+    <div class="call-step" id="call-step-3">
+      <div class="call-step-label">Step 3 / 3</div>
+      <div class="call-step-title">内容を確認して送信</div>
+
+      <div class="call-confirm-card">
+        <div class="confirm-row">
+          <span class="confirm-label">工程</span>
+          <span class="confirm-value" id="confirm-process"></span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">ライン</span>
+          <span class="confirm-value" id="confirm-line"></span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">呼び出し内容</span>
+          <span class="confirm-value" id="confirm-type"></span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">メモ（任意）</span>
+          <input type="text" id="call-memo" placeholder="補足を入力..." style="flex:1;">
+        </div>
+      </div>
+
+      <div class="call-actions">
+        <button class="btn btn-ghost" onclick="callGoStep(2)">← 内容を選び直す</button>
+        <button class="btn btn-danger btn-lg" onclick="submitCall()" id="submit-call-btn">
+          🔔 呼び出しを送信
+        </button>
+      </div>
+    </div>
+
+    <!-- 送信完了 -->
+    <div class="call-step" id="call-step-done">
+      <div style="text-align:center;padding:40px 20px;">
+        <div style="font-size:64px;margin-bottom:16px;">✅</div>
+        <div style="font-size:24px;font-weight:700;margin-bottom:8px;">送信しました</div>
+        <div style="color:var(--text2);margin-bottom:32px;" id="sent-summary"></div>
+        <button class="btn btn-primary btn-lg" onclick="callReset()">次の呼び出しへ</button>
+      </div>
+    </div>
+
+    <!-- 直近の呼び出し状況バー -->
+    <div class="call-summary-bar" id="call-summary-bar">
+      <div class="summary-item">現在の呼び出し: <span id="summary-active-count">0</span> 件</div>
+      <div class="summary-item">本日完了: <span id="summary-done-count">0</span> 件</div>
+    </div>
+  </div>
+</div>
+
+<!-- ③ モニター画面 -->
+<div id="screen-monitor" class="screen">
+  <div class="monitor-header">
+    <div class="logo">🔔 Andon Monitor</div>
+    <div style="color:var(--text2);font-size:14px;" id="monitor-tenant-name"></div>
+    <div class="spacer"></div>
+    <div class="clock" id="monitor-clock"></div>
+    <div class="header-stat" style="text-align:right;">
+      <div class="num" id="monitor-active-count">0</div>
+      <div class="lbl">対応中</div>
+    </div>
+  </div>
+  <div class="monitor-body" id="monitor-body">
+    <div class="monitor-empty">
+      <div class="empty-icon">🏭</div>
+      <div class="empty-msg">現在、呼び出しはありません</div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ 担当者画面（スマホ） -->
+<div id="screen-mobile" class="screen">
+  <div class="mobile-header">
+    <div class="logo">🔔 Andon</div>
+    <div class="user-name" id="mobile-user-name"></div>
+    <div class="mobile-available-toggle off" id="avail-toggle" onclick="toggleAvailable()">
+      <div class="dot"></div>
+      <span id="avail-label">待機中</span>
+    </div>
+  </div>
+  <div class="mobile-body" id="mobile-body">
+    <div class="push-notice" id="push-notice" style="display:none;">
+      📳 プッシュ通知を <strong>許可</strong> するとスマホに通知が届きます
+      <br><button class="btn btn-primary" style="margin-top:10px;width:100%;" onclick="requestPushPermission()">通知を許可する</button>
+    </div>
+    <div class="mobile-section-label">割り当て中</div>
+    <div id="mobile-assigned-list"></div>
+    <div class="mobile-section-label" style="margin-top:4px;">対応中</div>
+    <div id="mobile-inprogress-list"></div>
+  </div>
+</div>
+
+<!-- ⑤ 管理画面 -->
+<div id="screen-admin" class="screen">
+  <div class="admin-header">
+    <div class="logo">⚙️ 管理画面 — Andon Cloud</div>
+    <div style="color:var(--text2);font-size:13px;" id="admin-tenant-display"></div>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost" style="font-size:12px;" onclick="signOutUser()">ログアウト</button>
+  </div>
+
+  <div class="admin-nav">
+    <div class="admin-nav-item active" data-tab="members" onclick="adminTab(this,'members')">メンバー</div>
+    <div class="admin-nav-item" data-tab="processes" onclick="adminTab(this,'processes')">工程・ライン</div>
+    <div class="admin-nav-item" data-tab="calltypes" onclick="adminTab(this,'calltypes')">呼び出し種別</div>
+    <div class="admin-nav-item" data-tab="analytics" onclick="adminTab(this,'analytics')">📊 分析</div>
+    <div class="admin-nav-item" data-tab="improvements" onclick="adminTab(this,'improvements')">🔧 改善</div>
+    <div class="admin-nav-item" data-tab="tenant" onclick="adminTab(this,'tenant')">テナント設定</div>
+  </div>
+
+  <div class="admin-body">
+
+    <!-- メンバー管理 -->
+    <div class="admin-tab active" id="tab-members">
+      <div class="admin-section-header">
+        <div class="admin-section-title">メンバー一覧</div>
+        <button class="btn btn-primary" onclick="openAddMemberModal()">＋ メンバー追加</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table">
+          <thead><tr>
+            <th>名前</th><th>メールアドレス</th><th>権限</th><th>状態</th><th>招待</th><th></th>
+          </tr></thead>
+          <tbody id="members-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 工程・ライン管理 -->
+    <div class="admin-tab" id="tab-processes">
+      <div class="admin-section-header">
+        <div class="admin-section-title">工程・ライン一覧</div>
+        <button class="btn btn-primary" onclick="openAddProcessModal()">＋ 工程追加</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table">
+          <thead><tr><th>工程名</th><th>ライン名</th><th>アイコン</th><th>有効</th><th></th></tr></thead>
+          <tbody id="processes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 呼び出し種別 -->
+    <div class="admin-tab" id="tab-calltypes">
+      <div class="admin-section-header">
+        <div class="admin-section-title">呼び出し種別</div>
+        <button class="btn btn-primary" onclick="openAddCallTypeModal()">＋ 種別追加</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table">
+          <thead><tr><th>種別名</th><th>優先度</th><th>有効</th><th></th></tr></thead>
+          <tbody id="calltypes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 分析タブ -->
+    <div class="admin-tab" id="tab-analytics">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+        <div class="admin-section-title" style="margin-bottom:0;">呼び出し分析</div>
+        <div class="period-selector">
+          <button class="period-btn active" onclick="setAnalyticsPeriod(30,this)">30日</button>
+          <button class="period-btn" onclick="setAnalyticsPeriod(60,this)">60日</button>
+          <button class="period-btn" onclick="setAnalyticsPeriod(90,this)">90日</button>
+        </div>
+        <button class="btn btn-ghost" style="margin-left:auto;font-size:12px;" onclick="loadAnalytics()">↺ 更新</button>
+      </div>
+
+      <div class="stat-grid" id="analytics-stats">
+        <div style="color:var(--text2);font-size:13px;grid-column:1/-1;">「分析」タブを開くとデータを読み込みます</div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">日別 呼び出し件数</div>
+          <div id="trend-chart-wrap"><div style="color:var(--text2);font-size:12px;">—</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">根本原因 内訳</div>
+          <div class="rc-list" id="root-cause-chart"><div style="color:var(--text2);font-size:12px;">—</div></div>
+          <div style="font-size:10px;color:var(--text2);margin-top:8px;">※ 対応完了した案件のみ集計</div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:20px;">
+        <div class="chart-title">時間帯 × 工程 ヒートマップ</div>
+        <div class="heatmap-wrap" id="heatmap-wrap"><div style="color:var(--text2);font-size:12px;">—</div></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">工程別 呼び出し件数 TOP5</div>
+          <div class="rank-list" id="process-ranking"><div style="color:var(--text2);font-size:12px;">—</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">種別別 呼び出し件数 TOP5</div>
+          <div class="rank-list" id="calltype-ranking"><div style="color:var(--text2);font-size:12px;">—</div></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">繰り返し発生ランキング（工程 × 種別）</div>
+        <div class="rank-list" id="recurrence-ranking"><div style="color:var(--text2);font-size:12px;">—</div></div>
+        <div style="font-size:10px;color:var(--text2);margin-top:8px;">同じ工程・種別で繰り返し発生している問題 ＝ 改善優先度が高い</div>
+      </div>
+    </div>
+
+    <!-- 改善アクションタブ -->
+    <div class="admin-tab" id="tab-improvements">
+      <div class="admin-section-header">
+        <div class="admin-section-title">改善アクション</div>
+        <button class="btn btn-primary" onclick="openCreateImprovementModal()">＋ 追加</button>
+      </div>
+      <div class="filter-tabs">
+        <div class="filter-tab active" onclick="filterImprovements('all',this)">すべて</div>
+        <div class="filter-tab" onclick="filterImprovements('planning',this)">計画中</div>
+        <div class="filter-tab" onclick="filterImprovements('doing',this)">実施中</div>
+        <div class="filter-tab" onclick="filterImprovements('verifying',this)">検証中</div>
+        <div class="filter-tab" onclick="filterImprovements('closed',this)">完了</div>
+      </div>
+      <div class="improvement-list" id="improvements-list">
+        <div style="text-align:center;padding:40px;color:var(--text2);">
+          <div style="font-size:32px;margin-bottom:12px;">📋</div>
+          <div>「改善」タブを開くとデータを読み込みます</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- テナント設定 -->
+    <div class="admin-tab" id="tab-tenant">
+      <div class="card" style="max-width:500px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:20px;">テナント情報</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="field">
+            <label>テナント名（会社名）</label>
+            <input type="text" id="tenant-name-input" placeholder="例：○○製作所">
+          </div>
+          <div class="field">
+            <label>テナントID</label>
+            <input type="text" id="tenant-id-display" disabled style="opacity:.5;">
+          </div>
+          <div class="field">
+            <label>プラン</label>
+            <input type="text" id="tenant-plan-display" disabled style="opacity:.5;">
+          </div>
+          <button class="btn btn-primary" style="width:fit-content;" onclick="saveTenantName()">保存</button>
+        </div>
+      </div>
+      <div class="card" style="max-width:500px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px;">呼び出し画面URL</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <label>呼び出し用（タブレット設置）</label>
+            <div class="qr-url" id="url-call"></div>
+          </div>
+          <div>
+            <label>モニター用（大型ディスプレイ）</label>
+            <div class="qr-url" id="url-monitor"></div>
+          </div>
+          <div>
+            <label>担当者用（スマホ）</label>
+            <div class="qr-url" id="url-mobile"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: メンバー追加 -->
+<div class="modal-backdrop" id="modal-member">
+  <div class="modal-box">
+    <div class="modal-title">メンバー追加</div>
+    <div class="modal-fields">
+      <div class="field"><label>名前</label><input type="text" id="new-member-name" placeholder="田中 一郎"></div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="new-member-email" placeholder="user@example.com"></div>
+      <div class="field"><label>初期パスワード</label><input type="password" id="new-member-pass" placeholder="8文字以上"></div>
+      <div class="field">
+        <label>権限</label>
+        <select id="new-member-role">
+          <option value="member">メンバー（現場担当）</option>
+          <option value="admin">管理者</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-member')">キャンセル</button>
+      <button class="btn btn-primary" onclick="addMember()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 工程追加 -->
+<div class="modal-backdrop" id="modal-process">
+  <div class="modal-box">
+    <div class="modal-title">工程・ライン追加</div>
+    <div class="modal-fields">
+      <div class="field"><label>工程名</label><input type="text" id="new-process-name" placeholder="組立"></div>
+      <div class="field"><label>ライン名</label><input type="text" id="new-process-line" placeholder="Aライン"></div>
+      <div class="field"><label>アイコン（絵文字）</label><input type="text" id="new-process-icon" placeholder="🔧" maxlength="2" style="font-size:24px;text-align:center;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-process')">キャンセル</button>
+      <button class="btn btn-primary" onclick="addProcess()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 対応完了（根本原因） -->
+<div class="modal-backdrop" id="modal-complete">
+  <div class="modal-box">
+    <div class="modal-title">対応完了の記録</div>
+    <div class="modal-fields">
+      <div class="field">
+        <label>対応内容（任意）</label>
+        <textarea id="complete-content" rows="3" placeholder="行った対応を記入..."></textarea>
+      </div>
+      <div class="field">
+        <label>この呼び出しの根本原因は？</label>
+        <div class="root-cause-grid" id="root-cause-grid"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-complete')">キャンセル</button>
+      <button class="btn btn-success" onclick="submitComplete()">✅ 完了として記録</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 改善アクション作成 -->
+<div class="modal-backdrop" id="modal-improvement">
+  <div class="modal-box" style="max-width:520px;">
+    <div class="modal-title">改善アクション追加</div>
+    <div class="modal-fields">
+      <div class="field">
+        <label>対象工程</label>
+        <select id="imp-process"><option value="">— 対象工程（任意）—</option></select>
+      </div>
+      <div class="field">
+        <label>対象呼び出し種別</label>
+        <select id="imp-calltype"><option value="">— 対象種別（任意）—</option></select>
+      </div>
+      <div id="imp-baseline-info" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--text2);display:none;">
+        📊 直近30日の呼び出し件数（対策前ベースライン）: <strong id="imp-baseline-count" style="color:var(--accent);">—</strong> 件
+      </div>
+      <div class="field">
+        <label>問題の仮説（なぜ繰り返し発生しているか）</label>
+        <textarea id="imp-hypothesis" rows="2" placeholder="例：段取り手順が文書化されておらず、作業者によって対応がバラバラ"></textarea>
+      </div>
+      <div class="field">
+        <label>対策内容 <span style="color:var(--danger);">*</span></label>
+        <textarea id="imp-action" rows="2" placeholder="例：手順書を作成しQRコードで工程に掲示する"></textarea>
+      </div>
+      <div class="field">
+        <label>担当者</label>
+        <input type="text" id="imp-owner" placeholder="例：田中一郎">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-improvement')">キャンセル</button>
+      <button class="btn btn-primary" onclick="createImprovement()">作成</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 呼び出し種別追加 -->
+<div class="modal-backdrop" id="modal-calltype">
+  <div class="modal-box">
+    <div class="modal-title">呼び出し種別追加</div>
+    <div class="modal-fields">
+      <div class="field"><label>種別名</label><input type="text" id="new-ct-name" placeholder="品質確認"></div>
+      <div class="field">
+        <label>優先度</label>
+        <select id="new-ct-priority">
+          <option value="urgent">緊急</option>
+          <option value="normal" selected>通常</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-calltype')">キャンセル</button>
+      <button class="btn btn-primary" onclick="addCallType()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- =============================================
+   Firebase Service Worker（Push通知用）
+   ※ firebase-messaging-sw.js を別途ルートに配置すること
+============================================= -->
+
+<script>
+// =============================================
+// ★ 設定エリア（新規プロジェクト作成後に書き換え）
+// =============================================
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAJl87Z7mQNHCAJJ11HQC4BiJltF1ddUzk",
+  authDomain:        "kouki-e7805.firebaseapp.com",
+  projectId:         "kouki-e7805",
+  storageBucket:     "kouki-e7805.firebasestorage.app",
+  messagingSenderId: "63552823591",
+  appId:             "1:63552823591:web:34d1ac8b7d5c72ba744902"
+};
+
+// Web Push 公開鍵（FCM → プロジェクト設定 → クラウドメッセージング → ウェブプッシュ証明書）
+const VAPID_KEY = "BMILS8BVAOhH1MxpUJ-iKMSzHbFjAwgCvJPnGqpsXfxs8zTbcxxFCuN2ZJ2XFHs911aG45_DAYk1AqVjM1R91Yc";
+
+// =============================================
+// Firebase 初期化
+// =============================================
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth      = firebase.auth();
+const db        = firebase.firestore();
+const functions = firebase.functions();
+functions.useEmulator && false; // リージョン設定はCallable側で対応
+
+// =============================================
+// Cloud Functions Callable 参照 (Gen2 Cloud Run URLs)
+// ★ ビジネスロジックはすべてサーバー側で実行
+// =============================================
+const fn = {
+  createCase:       functions.httpsCallableFromURL('https://createcase-svesbeblda-an.a.run.app'),
+  respondCase:      functions.httpsCallableFromURL('https://respondcase-svesbeblda-an.a.run.app'),
+  completeCase:     functions.httpsCallableFromURL('https://completecase-svesbeblda-an.a.run.app'),
+  declineCase:      functions.httpsCallableFromURL('https://declinecase-svesbeblda-an.a.run.app'),
+  createMember:     functions.httpsCallableFromURL('https://createmember-svesbeblda-an.a.run.app'),
+  deleteMember:     functions.httpsCallableFromURL('https://deletemember-svesbeblda-an.a.run.app'),
+  registerFCMToken: functions.httpsCallableFromURL('https://registerfcmtoken-svesbeblda-an.a.run.app'),
+  initTenant:       functions.httpsCallableFromURL('https://inittenant-svesbeblda-an.a.run.app'),
+};
+
+let messaging = null;
+try {
+  messaging = firebase.messaging();
+} catch(e) {
+  console.warn("FCM not supported:", e);
+}
+
+// =============================================
+// グローバル状態
+// =============================================
+let tenantId   = null;
+let currentUser = null;
+let currentUserDoc = null;
+let currentMode = null;  // 'call' | 'monitor' | 'mobile' | 'admin'
+
+// 呼び出し画面の選択状態
+let selectedProcess = null;
+let selectedCallType = null;
+
+// リアルタイムリスナー解除用
+const unsubscribes = [];
+
+// =============================================
+// テナントIDをURLから取得
+// =============================================
+function getTenantIdFromURL() {
+  return new URLSearchParams(location.search).get('tenant');
+}
+
+function getModeFromURL() {
+  return new URLSearchParams(location.search).get('mode') || 'mobile';
+}
+
+// Firestoreパスヘルパー
+function tenantCol(col) {
+  return db.collection('tenants').doc(tenantId).collection(col);
+}
+function tenantDoc(path) {
+  return db.doc(`tenants/${tenantId}/${path}`);
+}
+
+// =============================================
+// 起動処理
+// =============================================
+window.addEventListener('DOMContentLoaded', () => {
+  tenantId = getTenantIdFromURL();
+  currentMode = getModeFromURL();
+
+  if (!tenantId) {
+    showScreen('login');
+    document.getElementById('no-tenant-hint').style.display = 'block';
+    return;
+  }
+
+  // 5秒タイムアウト：Firebase接続に失敗した場合はログイン画面を表示
+  const authTimeout = setTimeout(() => {
+    console.warn('Auth timeout — showing login screen');
+    showScreen('login');
+  }, 5000);
+
+  auth.onAuthStateChanged(async (user) => {
+    clearTimeout(authTimeout);
+    try {
+      if (user) {
+        currentUser = user;
+        await loadUserDoc();
+        routeToScreen();
+      } else {
+        // テナント情報を表示
+        const tenantSnap = await db.collection('tenants').doc(tenantId).get().catch(() => null);
+        if (tenantSnap && tenantSnap.exists) {
+          document.getElementById('tenant-display').textContent = tenantSnap.data().name || tenantId;
+          document.getElementById('tenant-badge').style.display = 'block';
+        }
+        showScreen('login');
+      }
+    } catch (e) {
+      console.error('Auth routing error:', e);
+      showScreen('login');
+    }
+  });
+});
+
+async function loadUserDoc() {
+  const snap = await tenantCol('users').doc(currentUser.uid).get();
+  currentUserDoc = snap.exists ? snap.data() : null;
+}
+
+function routeToScreen() {
+  if (!currentUserDoc) {
+    showToast('ユーザー情報が見つかりません');
+    auth.signOut();
+    return;
+  }
+
+  // 管理者はmodeに関係なくadmin画面に行ける
+  if (currentMode === 'admin' && currentUserDoc.role === 'admin') {
+    initAdminScreen();
+    showScreen('admin');
+    return;
+  }
+
+  switch (currentMode) {
+    case 'call':    initCallScreen();    showScreen('call');    break;
+    case 'monitor': initMonitorScreen(); showScreen('monitor'); break;
+    case 'admin':
+      if (currentUserDoc.role !== 'admin') {
+        initMobileScreen(); showScreen('mobile');
+      } else {
+        initAdminScreen(); showScreen('admin');
+      }
+      break;
+    default:        initMobileScreen();  showScreen('mobile');  break;
+  }
+}
+
+// =============================================
+// 画面表示切替
+// =============================================
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(`screen-${name}`);
+  if (el) el.classList.add('active');
+}
+
+// =============================================
+// ログイン / ログアウト
+// =============================================
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+
+  if (!tenantId) { showError(errEl, 'URLにテナントIDが必要です'); return; }
+  if (!email || !pass) { showError(errEl, 'メールとパスワードを入力してください'); return; }
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+    // onAuthStateChangedがルーティングを行う
+  } catch (e) {
+    showError(errEl, authErrMsg(e.code));
+    btn.disabled = false;
+    btn.textContent = 'ログイン';
+  }
+}
+
+function authErrMsg(code) {
+  const map = {
+    'auth/invalid-email':      'メールアドレスの形式が正しくありません',
+    'auth/user-not-found':     'このメールアドレスは登録されていません',
+    'auth/wrong-password':     'パスワードが正しくありません',
+    'auth/invalid-credential': 'メールアドレスまたはパスワードが正しくありません',
+    'auth/too-many-requests':  'ログイン試行が多すぎます。しばらくお待ちください',
+  };
+  return map[code] || `ログインエラー (${code})`;
+}
+
+function showError(el, msg) {
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// Enterキーでログイン
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) {
+    doLogin();
+  }
+});
+
+function signOutUser() {
+  if (!confirm('ログアウトしますか？')) return;
+  unsubscribes.forEach(u => u());
+  auth.signOut();
+}
+
+// =============================================
+// ② 呼び出し画面
+// =============================================
+function initCallScreen() {
+  document.getElementById('call-tenant-name').textContent = currentUserDoc?.tenantName || tenantId;
+  loadProcesses();
+  loadCallTypes();
+  subscribeCallSummary();
+}
+
+async function loadProcesses() {
+  const snap = await tenantCol('processes').where('enabled','==',true).get();
+  const grid = document.getElementById('process-grid');
+  grid.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const btn = document.createElement('div');
+    btn.className = 'process-btn';
+    btn.innerHTML = `
+      <div class="process-icon">${d.icon || '🏭'}</div>
+      <div class="process-name">${d.name}</div>
+      <div class="process-line">${d.line || ''}</div>`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.process-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedProcess = { id: doc.id, name: d.name, line: d.line || '', icon: d.icon || '🏭' };
+      setTimeout(() => callGoStep(2), 200);
+    });
+    grid.appendChild(btn);
+  });
+}
+
+async function loadCallTypes() {
+  const snap = await tenantCol('callTypes').where('enabled','==',true).get();
+  const grid = document.getElementById('call-type-grid');
+  grid.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const btn = document.createElement('div');
+    btn.className = 'call-type-btn';
+    btn.textContent = d.name;
+    btn.dataset.priority = d.priority || 'normal';
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.call-type-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedCallType = { id: doc.id, name: d.name, priority: d.priority || 'normal' };
+      setTimeout(() => callGoStep(3), 200);
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function callGoStep(step) {
+  document.querySelectorAll('.call-step').forEach(s => s.classList.remove('active'));
+  document.getElementById(`call-step-${step}`).classList.add('active');
+
+  if (step === 3 && selectedProcess && selectedCallType) {
+    document.getElementById('confirm-process').textContent = `${selectedProcess.icon} ${selectedProcess.name}`;
+    document.getElementById('confirm-line').textContent    = selectedProcess.line || '—';
+    document.getElementById('confirm-type').textContent    = selectedCallType.name;
+    document.getElementById('call-memo').value = '';
+  }
+}
+
+async function submitCall() {
+  if (!selectedProcess || !selectedCallType) return;
+
+  const btn = document.getElementById('submit-call-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 送信中...';
+
+  const memo = document.getElementById('call-memo').value.trim();
+
+  try {
+    // ★ Firestoreに直接書かず、Cloud Functions経由で作成
+    //   → バリデーション・プラン制限・Push通知はすべてサーバー側で実行
+    const result = await fn.createCase({
+      tenantId,
+      processId:    selectedProcess.id,
+      callTypeName: selectedCallType.name,
+      priority:     selectedCallType.priority,
+      memo,
+    });
+
+    document.getElementById('sent-summary').textContent =
+      `${selectedProcess.icon} ${selectedProcess.name} / ${selectedCallType.name}`;
+
+    callGoStep('done');
+  } catch (e) {
+    console.error(e);
+    showToast('送信に失敗しました: ' + (e.message || e.code));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔔 呼び出しを送信';
+  }
+}
+
+function callReset() {
+  selectedProcess = null;
+  selectedCallType = null;
+  document.querySelectorAll('.process-btn, .call-type-btn').forEach(b => b.classList.remove('selected'));
+  callGoStep(1);
+}
+
+function subscribeCallSummary() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const unsub1 = tenantCol('cases')
+    .where('status','in',['pending','inprogress'])
+    .onSnapshot(snap => {
+      document.getElementById('summary-active-count').textContent = snap.size;
+    });
+  const unsub2 = tenantCol('cases')
+    .where('status','==','completed')
+    .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(today))
+    .onSnapshot(snap => {
+      document.getElementById('summary-done-count').textContent = snap.size;
+    });
+  unsubscribes.push(unsub1, unsub2);
+}
+
+// =============================================
+// ③ モニター画面
+// =============================================
+function initMonitorScreen() {
+  document.getElementById('monitor-tenant-name').textContent = tenantId;
+  startClock();
+  subscribeCases();
+}
+
+function startClock() {
+  const el = document.getElementById('monitor-clock');
+  const tick = () => {
+    el.textContent = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+function subscribeCases() {
+  const unsub = tenantCol('cases')
+    .where('status','in',['pending','inprogress'])
+    .orderBy('createdAt','asc')
+    .onSnapshot(snap => {
+      renderMonitor(snap.docs);
+    });
+  unsubscribes.push(unsub);
+}
+
+function renderMonitor(docs) {
+  const body = document.getElementById('monitor-body');
+  document.getElementById('monitor-active-count').textContent = docs.length;
+
+  if (docs.length === 0) {
+    body.innerHTML = `
+      <div class="monitor-empty">
+        <div class="empty-icon">🏭</div>
+        <div class="empty-msg">現在、呼び出しはありません</div>
+      </div>`;
+    return;
+  }
+
+  body.innerHTML = '';
+  docs.forEach(doc => {
+    const d = doc.data();
+    const createdAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date();
+    const elapsed = Math.floor((Date.now() - createdAt.getTime()) / 1000);
+    const statusClass = d.status === 'inprogress' ? 'status-inprogress' : 'status-pending';
+    const statusLabel = d.status === 'inprogress' ? '対応中' : '未対応';
+    const badgeClass  = d.status === 'inprogress' ? 'badge-active' : 'badge-pending';
+
+    const card = document.createElement('div');
+    card.className = `case-card ${statusClass}`;
+    card.id = `case-${doc.id}`;
+    card.innerHTML = `
+      <div class="case-card-top">
+        <div style="font-size:36px;">${d.processIcon || '🏭'}</div>
+        <div class="case-card-info">
+          <div class="case-card-process">${d.processName}</div>
+          <div class="case-card-type">${d.callTypeName}</div>
+        </div>
+        <div>
+          <span class="badge ${badgeClass}">${statusLabel}</span>
+          <div class="elapsed-timer ${elapsed > 300 ? 'warning' : ''}" id="timer-${doc.id}">
+            ${formatElapsed(elapsed)}
+          </div>
+        </div>
+      </div>
+      <div class="case-card-meta">
+        <div class="case-meta-item"><span>ライン: </span>${d.processLine || '—'}</div>
+        <div class="case-meta-item"><span>発信: </span>${d.callerName || '—'}</div>
+        ${d.assignedTo ? `<div class="case-meta-item"><span>担当: </span>${d.assignedTo}</div>` : ''}
+        ${d.memo ? `<div class="case-meta-item"><span>メモ: </span>${d.memo}</div>` : ''}
+      </div>`;
+    body.appendChild(card);
+
+    // タイマー更新
+    setInterval(() => {
+      const t = document.getElementById(`timer-${doc.id}`);
+      if (!t) return;
+      const s = Math.floor((Date.now() - createdAt.getTime()) / 1000);
+      t.textContent = formatElapsed(s);
+      t.classList.toggle('warning', s > 300);
+    }, 1000);
+  });
+}
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// =============================================
+// ④ 担当者画面（スマホ）
+// =============================================
+function initMobileScreen() {
+  document.getElementById('mobile-user-name').textContent = currentUserDoc.name || currentUser.email;
+  setAvailableUI(currentUserDoc.available !== false);
+  checkPushPermission();
+  subscribeMyCases();
+}
+
+function setAvailableUI(isOn) {
+  const el = document.getElementById('avail-toggle');
+  el.classList.toggle('on', isOn);
+  el.classList.toggle('off', !isOn);
+  document.getElementById('avail-label').textContent = isOn ? '対応可' : '待機中';
+}
+
+async function toggleAvailable() {
+  const newVal = !(currentUserDoc.available !== false);
+  currentUserDoc.available = newVal;
+  setAvailableUI(newVal);
+  await tenantCol('users').doc(currentUser.uid).update({ available: newVal });
+}
+
+function subscribeMyCases() {
+  const unsub = tenantCol('cases')
+    .where('status','in',['pending','inprogress'])
+    .onSnapshot(snap => {
+      const assigned   = snap.docs.filter(d => d.data().assignedTo === currentUserDoc.name && d.data().status === 'pending');
+      const inprogress = snap.docs.filter(d => d.data().respondedBy === currentUserDoc.name && d.data().status === 'inprogress');
+      renderMobileList('mobile-assigned-list', assigned, 'assigned');
+      renderMobileList('mobile-inprogress-list', inprogress, 'inprogress');
+    });
+  unsubscribes.push(unsub);
+}
+
+function renderMobileList(containerId, docs, type) {
+  const el = document.getElementById(containerId);
+  if (docs.length === 0) {
+    el.innerHTML = `<div style="color:var(--text2);font-size:13px;padding:8px 0;">なし</div>`;
+    return;
+  }
+  el.innerHTML = '';
+  docs.forEach(doc => {
+    const d = doc.data();
+    const card = document.createElement('div');
+    card.className = `mobile-case-card ${type}`;
+    card.innerHTML = `
+      <div class="mobile-case-process">${d.processIcon || '🏭'} ${d.processName}</div>
+      <div class="mobile-case-type">${d.callTypeName}</div>
+      <div class="mobile-case-meta">${d.processLine || ''} ${d.memo ? '— ' + d.memo : ''}</div>
+      <div class="mobile-case-actions">
+        ${type === 'assigned'
+          ? `<button class="btn btn-primary" onclick="respondCase('${doc.id}')">対応開始</button>
+             <button class="btn btn-ghost" onclick="declineCase('${doc.id}')">対応不可</button>`
+          : `<button class="btn btn-success" onclick="openCompleteModal('${doc.id}')">完了</button>`}
+      </div>`;
+    el.appendChild(card);
+  });
+}
+
+async function respondCase(caseId) {
+  await fn.respondCase({ tenantId, caseId });
+  showToast('対応を開始しました');
+}
+
+async function completeCase(caseId) {
+  await fn.completeCase({ tenantId, caseId });
+  showToast('対応完了しました ✅');
+}
+
+async function declineCase(caseId) {
+  const res = await fn.declineCase({ tenantId, caseId });
+  const next = res.data?.nextAssignee;
+  showToast(next ? `次の担当者（${next}）に引き継ぎました` : '引き継ぎ先がいません');
+}
+
+// =============================================
+// Push通知
+// =============================================
+async function checkPushPermission() {
+  if (!messaging) return;
+  const notice = document.getElementById('push-notice');
+  if (Notification.permission === 'granted') {
+    await registerFCMToken();
+    notice.style.display = 'none';
+  } else if (Notification.permission === 'default') {
+    notice.style.display = 'block';
+  }
+}
+
+async function requestPushPermission() {
+  if (!messaging) return;
+  try {
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    await fn.registerFCMToken({ tenantId, token }); // ★ Functions経由で保存
+    document.getElementById('push-notice').style.display = 'none';
+    showToast('プッシュ通知を有効にしました 📳');
+  } catch (e) {
+    showToast('通知の許可が拒否されました');
+  }
+}
+
+async function registerFCMToken() {
+  if (!messaging) return;
+  try {
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    await fn.registerFCMToken({ tenantId, token }); // ★ Functions経由で保存
+  } catch (e) {
+    console.warn('FCMトークン取得失敗:', e);
+  }
+}
+
+async function saveFCMToken(token) {
+  // 旧実装（直接書き込み）は使用しない → fn.registerFCMToken を使用
+}
+
+messaging?.onMessage(payload => {
+  showToast(`🔔 ${payload.notification?.title || '新しい呼び出し'}`);
+});
+
+// =============================================
+// ⑤ 管理画面
+// =============================================
+function initAdminScreen() {
+  const tenantRef = db.collection('tenants').doc(tenantId);
+  tenantRef.get().then(snap => {
+    const d = snap.data() || {};
+    document.getElementById('admin-tenant-display').textContent = d.name || tenantId;
+    document.getElementById('tenant-name-input').value = d.name || '';
+    document.getElementById('tenant-id-display').value = tenantId;
+    document.getElementById('tenant-plan-display').value = d.plan || 'trial';
+
+    const base = `${location.origin}${location.pathname}?tenant=${tenantId}`;
+    document.getElementById('url-call').textContent    = `${base}&mode=call`;
+    document.getElementById('url-monitor').textContent = `${base}&mode=monitor`;
+    document.getElementById('url-mobile').textContent  = `${base}&mode=mobile`;
+  });
+
+  loadMembersTable();
+  loadProcessesTable();
+  loadCallTypesTable();
+}
+
+function adminTab(el, name) {
+  document.querySelectorAll('.admin-nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'analytics')    loadAnalytics();
+  if (name === 'improvements') loadImprovements();
+}
+
+// --- メンバー管理 ---
+async function loadMembersTable() {
+  const snap = await tenantCol('users').get();
+  const tbody = document.getElementById('members-tbody');
+  tbody.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.name || '—'}</td>
+      <td style="color:var(--text2);font-size:12px;">${d.email || '—'}</td>
+      <td>${d.role === 'admin' ? '管理者' : 'メンバー'}</td>
+      <td>
+        <span class="member-row-available">
+          <span class="${d.available !== false ? 'dot-on' : 'dot-off'}"></span>
+          ${d.available !== false ? '対応可' : '待機中'}
+        </span>
+      </td>
+      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" 
+          onclick="showInviteInfo('${doc.id}','${(d.email||'').replace(/'/g,"\\'")}')">招待URL</button></td>
+      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);"
+          onclick="deleteMember('${doc.id}')">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddMemberModal() {
+  document.getElementById('new-member-name').value = '';
+  document.getElementById('new-member-email').value = '';
+  document.getElementById('new-member-pass').value = '';
+  openModal('modal-member');
+}
+
+async function addMember() {
+  const name  = document.getElementById('new-member-name').value.trim();
+  const email = document.getElementById('new-member-email').value.trim();
+  const pass  = document.getElementById('new-member-pass').value;
+  const role  = document.getElementById('new-member-role').value;
+
+  if (!name || !email || !pass) { showToast('全項目を入力してください'); return; }
+  if (pass.length < 8) { showToast('パスワードは8文字以上'); return; }
+
+  try {
+    // ★ Auth作成 + Firestore書き込みをFunctions側で一括実行
+    //   → HTMLを盗まれてもAdmin SDKなしには実行不可
+    await fn.createMember({ tenantId, name, email, password: pass, role });
+    closeModal('modal-member');
+    loadMembersTable();
+    showToast(`${name} を追加しました`);
+  } catch(e) {
+    showToast('追加失敗: ' + (e.message || e.code));
+  }
+}
+
+async function deleteMember(uid) {
+  if (!confirm('このメンバーを削除しますか？')) return;
+  try {
+    // ★ Auth削除 + Firestore削除をFunctions側で実行
+    await fn.deleteMember({ tenantId, targetUid: uid });
+    loadMembersTable();
+    showToast('削除しました');
+  } catch(e) {
+    showToast('削除失敗: ' + (e.message || e.code));
+  }
+}
+
+function showInviteInfo(uid, email) {
+  const url = `${location.origin}${location.pathname}?tenant=${tenantId}&mode=mobile`;
+  showToast(`URL: ${url} をコピーしてください`);
+}
+
+// --- 工程管理 ---
+async function loadProcessesTable() {
+  const snap = await tenantCol('processes').orderBy('createdAt','asc').get().catch(() => tenantCol('processes').get());
+  const tbody = document.getElementById('processes-tbody');
+  tbody.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.name}</td>
+      <td style="color:var(--text2);">${d.line || '—'}</td>
+      <td style="font-size:20px;">${d.icon || '🏭'}</td>
+      <td>${d.enabled !== false ? '✅' : '⏸'}</td>
+      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);"
+          onclick="deleteProcess('${doc.id}')">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddProcessModal() {
+  document.getElementById('new-process-name').value = '';
+  document.getElementById('new-process-line').value = '';
+  document.getElementById('new-process-icon').value = '🏭';
+  openModal('modal-process');
+}
+
+async function addProcess() {
+  const name = document.getElementById('new-process-name').value.trim();
+  const line = document.getElementById('new-process-line').value.trim();
+  const icon = document.getElementById('new-process-icon').value.trim() || '🏭';
+  if (!name) { showToast('工程名を入力してください'); return; }
+
+  await tenantCol('processes').add({
+    name, line, icon, enabled: true,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  closeModal('modal-process');
+  loadProcessesTable();
+  showToast('工程を追加しました');
+}
+
+async function deleteProcess(id) {
+  if (!confirm('この工程を削除しますか？')) return;
+  await tenantCol('processes').doc(id).delete();
+  loadProcessesTable();
+}
+
+// --- 呼び出し種別管理 ---
+async function loadCallTypesTable() {
+  const snap = await tenantCol('callTypes').get();
+  const tbody = document.getElementById('calltypes-tbody');
+  tbody.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.name}</td>
+      <td><span class="badge ${d.priority === 'urgent' ? 'badge-pending' : 'badge-active'}">${d.priority === 'urgent' ? '緊急' : '通常'}</span></td>
+      <td>${d.enabled !== false ? '✅' : '⏸'}</td>
+      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);"
+          onclick="deleteCallType('${doc.id}')">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddCallTypeModal() {
+  document.getElementById('new-ct-name').value = '';
+  openModal('modal-calltype');
+}
+
+async function addCallType() {
+  const name     = document.getElementById('new-ct-name').value.trim();
+  const priority = document.getElementById('new-ct-priority').value;
+  if (!name) { showToast('種別名を入力してください'); return; }
+
+  await tenantCol('callTypes').add({
+    name, priority, enabled: true,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  closeModal('modal-calltype');
+  loadCallTypesTable();
+  showToast('種別を追加しました');
+}
+
+async function deleteCallType(id) {
+  if (!confirm('この種別を削除しますか？')) return;
+  await tenantCol('callTypes').doc(id).delete();
+  loadCallTypesTable();
+}
+
+async function saveTenantName() {
+  const name = document.getElementById('tenant-name-input').value.trim();
+  if (!name) { showToast('テナント名を入力してください'); return; }
+  await db.collection('tenants').doc(tenantId).update({ name });
+  showToast('保存しました');
+}
+
+// =============================================
+// ユーティリティ
+// =============================================
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// モーダル外クリックで閉じる
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// =============================================
+// 対応完了モーダル（根本原因の収集）
+// =============================================
+const ROOT_CAUSE_OPTIONS = [
+  { value: 'equipment', label: '設備故障',  icon: '⚙️' },
+  { value: 'material',  label: '材料不足',  icon: '📦' },
+  { value: 'quality',   label: '品質問題',  icon: '🔍' },
+  { value: 'procedure', label: '手順不明',  icon: '📋' },
+  { value: 'staffing',  label: '人員不足',  icon: '👤' },
+  { value: 'other',     label: 'その他',    icon: '❓' },
+];
+const ROOT_CAUSE_LABELS = Object.fromEntries(ROOT_CAUSE_OPTIONS.map(o => [o.value, o.label]));
+
+let completingCaseId   = null;
+let selectedRootCause  = 'other';
+
+function openCompleteModal(caseId) {
+  completingCaseId  = caseId;
+  selectedRootCause = 'other';
+  document.getElementById('complete-content').value = '';
+
+  const grid = document.getElementById('root-cause-grid');
+  grid.innerHTML = '';
+  ROOT_CAUSE_OPTIONS.forEach(opt => {
+    const div = document.createElement('div');
+    div.className = 'rc-option' + (opt.value === 'other' ? ' selected' : '');
+    div.innerHTML  = `${opt.icon}<br>${opt.label}`;
+    div.onclick = () => {
+      grid.querySelectorAll('.rc-option').forEach(d => d.classList.remove('selected'));
+      div.classList.add('selected');
+      selectedRootCause = opt.value;
+    };
+    grid.appendChild(div);
+  });
+
+  openModal('modal-complete');
+}
+
+async function submitComplete() {
+  if (!completingCaseId) return;
+  const content = document.getElementById('complete-content').value.trim();
+  try {
+    await fn.completeCase({ tenantId, caseId: completingCaseId, content, rootCause: selectedRootCause });
+    closeModal('modal-complete');
+    showToast('対応完了しました ✅');
+  } catch (e) {
+    showToast('完了記録に失敗しました: ' + (e.message || e.code));
+  }
+}
+
+// =============================================
+// Layer 2: 分析ダッシュボード
+// =============================================
+let analyticsPeriod = 30;
+
+function setAnalyticsPeriod(days, btn) {
+  analyticsPeriod = days;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics();
+}
+
+async function loadAnalytics() {
+  document.getElementById('analytics-stats').innerHTML =
+    '<div style="color:var(--text2);font-size:13px;grid-column:1/-1;"><span class="spinner"></span> 読み込み中...</div>';
+  try {
+    const since = new Date(Date.now() - analyticsPeriod * 24 * 60 * 60 * 1000);
+    const snap  = await tenantCol('cases')
+      .where('createdAt', '>=', firebase.firestore.Timestamp.fromDate(since))
+      .get();
+    const cases = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAnalytics(aggregateCases(cases));
+  } catch (e) {
+    document.getElementById('analytics-stats').innerHTML =
+      `<div style="color:var(--danger);grid-column:1/-1;">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+function aggregateCases(cases) {
+  const completed = cases.filter(c => c.status === 'completed');
+
+  // 平均応答時間（分）
+  const responseTimes = cases
+    .filter(c => c.respondedAt && c.createdAt)
+    .map(c => (c.respondedAt.toMillis() - c.createdAt.toMillis()) / 60000);
+  const avgResponseMin = responseTimes.length
+    ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) : null;
+
+  // 再発率（同工程×同種別で直近に発生済みの案件）
+  const recurring     = cases.filter(c => (c.recurrenceCount30 || 0) > 0);
+  const recurrenceRate = cases.length ? Math.round(recurring.length / cases.length * 100) : 0;
+
+  // 工程別・種別別集計
+  const byProcess  = {};
+  const byCallType = {};
+  const byRootCause = {};
+  const byHour      = Array(24).fill(0);
+  const heatmap     = {};
+  const recurrence  = {};
+
+  cases.forEach(c => {
+    const pid = c.processId || 'unknown';
+    if (!byProcess[pid]) byProcess[pid] = { name: c.processName || '不明', count: 0 };
+    byProcess[pid].count++;
+
+    const ct = c.callTypeName || 'unknown';
+    if (!byCallType[ct]) byCallType[ct] = { name: ct, count: 0 };
+    byCallType[ct].count++;
+
+    if (c.createdAt?.toDate) {
+      const h = c.createdAt.toDate().getHours();
+      byHour[h]++;
+      if (!heatmap[pid]) heatmap[pid] = { name: c.processName || '不明', hours: Array(24).fill(0) };
+      heatmap[pid].hours[h]++;
+    }
+
+    const rk = `${pid}__${ct}`;
+    if (!recurrence[rk]) recurrence[rk] = { processName: c.processName || '不明', callTypeName: ct, count: 0 };
+    recurrence[rk].count++;
+  });
+
+  completed.forEach(c => {
+    const k = c.rootCause || 'other';
+    byRootCause[k] = (byRootCause[k] || 0) + 1;
+  });
+
+  // 日別トレンド
+  const byDay = {};
+  const today = new Date();
+  for (let i = analyticsPeriod - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    byDay[d.toISOString().split('T')[0]] = 0;
+  }
+  cases.forEach(c => {
+    if (c.createdAt?.toDate) {
+      const k = c.createdAt.toDate().toISOString().split('T')[0];
+      if (byDay[k] !== undefined) byDay[k]++;
+    }
+  });
+
+  return {
+    total: cases.length,
+    completedCount: completed.length,
+    avgResponseMin,
+    recurrenceRate,
+    byProcess:   Object.values(byProcess).sort((a, b) => b.count - a.count),
+    byCallType:  Object.values(byCallType).sort((a, b) => b.count - a.count),
+    byRootCause,
+    byHour,
+    heatmap,
+    byDay,
+    recurrence: Object.values(recurrence).sort((a, b) => b.count - a.count).slice(0, 8),
+  };
+}
+
+function renderAnalytics(data) {
+  const completionRate = data.total ? Math.round(data.completedCount / data.total * 100) : 0;
+  document.getElementById('analytics-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-value">${data.total}</div>
+      <div class="stat-label">総呼び出し件数</div>
+      <div class="stat-sub">直近 ${analyticsPeriod} 日</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--success);">${completionRate}%</div>
+      <div class="stat-label">完了率</div>
+      <div class="stat-sub">${data.completedCount} 件完了</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--accent2);">${data.avgResponseMin !== null ? data.avgResponseMin + '分' : '—'}</div>
+      <div class="stat-label">平均応答時間</div>
+      <div class="stat-sub">対応開始まで</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:${data.recurrenceRate > 30 ? 'var(--danger)' : 'var(--text)'};">${data.recurrenceRate}%</div>
+      <div class="stat-label">再発率</div>
+      <div class="stat-sub">同工程×種別の繰り返し</div>
+    </div>`;
+
+  renderTrendChart(data.byDay);
+  renderRootCauseChart(data.byRootCause, data.completedCount);
+  renderHeatmap(data.heatmap);
+  renderRanking('process-ranking',   data.byProcess,  data.total);
+  renderRanking('calltype-ranking',  data.byCallType, data.total);
+  renderRecurrenceRanking(data.recurrence);
+}
+
+function renderTrendChart(byDay) {
+  const entries = Object.entries(byDay);
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+  const bars = entries.map(([date, count]) => {
+    const h = Math.max(count / max * 76, count > 0 ? 4 : 2);
+    return `<div class="trend-bar" style="height:${h}px;">
+      <div class="trend-tip">${date}<br>${count}件</div>
+    </div>`;
+  }).join('');
+  const step = Math.ceil(entries.length / 6);
+  const labels = entries.map(([date,], i) =>
+    `<div class="trend-label">${i % step === 0 ? date.slice(5) : ''}</div>`
+  ).join('');
+  document.getElementById('trend-chart-wrap').innerHTML =
+    `<div class="trend-chart">${bars}</div><div class="trend-labels">${labels}</div>`;
+}
+
+function renderRootCauseChart(byRootCause, total) {
+  if (!total) { document.getElementById('root-cause-chart').innerHTML = '<div style="color:var(--text2);font-size:12px;">完了済み案件なし</div>'; return; }
+  const max = Math.max(...Object.values(byRootCause), 1);
+  document.getElementById('root-cause-chart').innerHTML = ROOT_CAUSE_OPTIONS.map(opt => {
+    const count = byRootCause[opt.value] || 0;
+    return `<div>
+      <div class="rc-label"><span>${opt.icon} ${opt.label}</span><span>${count}件</span></div>
+      <div class="rc-track"><div class="rc-fill" style="width:${Math.round(count/max*100)}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderHeatmap(heatmap) {
+  const processes = Object.values(heatmap).slice(0, 10);
+  if (!processes.length) { document.getElementById('heatmap-wrap').innerHTML = '<div style="color:var(--text2);font-size:12px;">データなし</div>'; return; }
+  const maxVal = Math.max(...processes.flatMap(p => p.hours), 1);
+  const hourHeaders = Array.from({ length: 24 }, (_, h) =>
+    `<div class="heatmap-hour-label">${String(h).padStart(2,'0')}</div>`).join('');
+  const rows = processes.map(p => {
+    const cells = p.hours.map((count, h) => {
+      const intensity = count > 0 ? (0.15 + (count / maxVal) * 0.85).toFixed(2) : 0;
+      const bg = count > 0 ? `background:rgba(245,158,11,${intensity});` : '';
+      return `<div class="heatmap-cell" style="${bg}"><div class="heatmap-tip">${p.name} ${String(h).padStart(2,'0')}時: ${count}件</div></div>`;
+    }).join('');
+    return `<div class="heatmap-row"><div class="heatmap-row-label" title="${p.name}">${p.name}</div>${cells}</div>`;
+  }).join('');
+  document.getElementById('heatmap-wrap').innerHTML =
+    `<div class="heatmap-row"><div class="heatmap-row-label"></div>${hourHeaders}</div>${rows}`;
+}
+
+function renderRanking(containerId, items, total) {
+  if (!items.length) { document.getElementById(containerId).innerHTML = '<div style="color:var(--text2);font-size:12px;">データなし</div>'; return; }
+  const max = items[0].count;
+  document.getElementById(containerId).innerHTML = items.slice(0, 5).map((item, i) => `
+    <div class="rank-item">
+      <div class="rank-num">${i + 1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-bar-label">${item.name} <span style="color:var(--text2);font-size:10px;">(${total ? Math.round(item.count/total*100) : 0}%)</span></div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.round(item.count/max*100)}%"></div></div>
+      </div>
+      <div class="rank-count">${item.count}</div>
+    </div>`).join('');
+}
+
+function renderRecurrenceRanking(items) {
+  if (!items.length) { document.getElementById('recurrence-ranking').innerHTML = '<div style="color:var(--text2);font-size:12px;">データなし</div>'; return; }
+  const max = items[0].count;
+  document.getElementById('recurrence-ranking').innerHTML = items.slice(0, 5).map((item, i) => `
+    <div class="rank-item">
+      <div class="rank-num">${i + 1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-bar-label">${item.processName} / ${item.callTypeName}</div>
+        <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.round(item.count/max*100)}%;background:var(--danger);"></div></div>
+      </div>
+      <div class="rank-count">${item.count}</div>
+    </div>`).join('');
+}
+
+// =============================================
+// Layer 3: 改善アクション管理
+// =============================================
+let allImprovements    = [];
+let improvementsFilter = 'all';
+
+async function loadImprovements() {
+  const snap = await tenantCol('improvements').orderBy('createdAt', 'desc').get()
+    .catch(() => tenantCol('improvements').get());
+  allImprovements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderImprovements();
+}
+
+function filterImprovements(status, btn) {
+  improvementsFilter = status;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderImprovements();
+}
+
+function renderImprovements() {
+  const STATUS_LABELS = { planning: '計画中', doing: '実施中', verifying: '検証中', closed: '完了' };
+  const filtered = improvementsFilter === 'all'
+    ? allImprovements : allImprovements.filter(i => i.status === improvementsFilter);
+
+  if (!filtered.length) {
+    document.getElementById('improvements-list').innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--text2);">
+        <div style="font-size:32px;margin-bottom:12px;">📋</div>
+        <div>改善アクションはまだありません</div>
+        <div style="font-size:12px;margin-top:6px;">「分析」タブの繰り返し発生ランキングを参考に追加してください</div>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('improvements-list').innerHTML = filtered.map(imp => {
+    const statusLabel = STATUS_LABELS[imp.status] || imp.status;
+    const hasEffect   = imp.afterCount !== null && imp.baselineCount > 0;
+    const effect      = hasEffect ? Math.round((1 - imp.afterCount / imp.baselineCount) * 100) : null;
+
+    const effectHtml = imp.baselineCount > 0 ? `
+      <div class="improvement-effect">
+        <div><div style="color:var(--text2);font-size:10px;">対策前(30日)</div><div style="font-size:15px;font-weight:700;">${imp.baselineCount}件</div></div>
+        <div style="color:var(--text2);">→</div>
+        <div><div style="color:var(--text2);font-size:10px;">対策後</div><div style="font-size:15px;font-weight:700;">${imp.afterCount !== null ? imp.afterCount + '件' : '測定中'}</div></div>
+        ${effect !== null ? `<div style="margin-left:auto;"><div style="color:var(--text2);font-size:10px;">削減効果</div>
+          <div class="effect-value ${effect < 0 ? 'bad' : ''}">${effect >= 0 ? '-' : '+'}${Math.abs(effect)}%</div></div>` : ''}
+      </div>` : '';
+
+    const btns = [];
+    if (imp.status === 'planning')  btns.push(`<button class="btn btn-primary" style="font-size:12px;" onclick="advanceImprovement('${imp.id}','doing')">実施開始</button>`);
+    if (imp.status === 'doing')     btns.push(`<button class="btn btn-ghost"   style="font-size:12px;" onclick="advanceImprovement('${imp.id}','verifying')">効果検証へ</button>`);
+    if (imp.status === 'verifying') btns.push(`<button class="btn btn-success" style="font-size:12px;" onclick="advanceImprovement('${imp.id}','closed')">完了として閉じる</button>`);
+    if (imp.status !== 'closed')    btns.push(`<button class="btn btn-ghost"   style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);" onclick="deleteImprovement('${imp.id}')">削除</button>`);
+
+    return `<div class="improvement-card status-${imp.status}">
+      <div class="improvement-header">
+        <div class="improvement-target">${imp.targetProcessName || '全工程'}${imp.targetCallType ? ' / ' + imp.targetCallType : ''}</div>
+        <span class="badge badge-status-${imp.status}">${statusLabel}</span>
+      </div>
+      ${imp.hypothesis ? `<div class="improvement-action" style="font-size:12px;color:var(--text2);margin-bottom:4px;">💡 ${imp.hypothesis}</div>` : ''}
+      <div class="improvement-action">🔧 ${imp.action}</div>
+      <div class="improvement-meta">
+        ${imp.owner ? `<span>担当: ${imp.owner}</span>` : ''}
+        ${imp.startDate?.toDate ? `<span>開始: ${imp.startDate.toDate().toLocaleDateString('ja-JP')}</span>` : ''}
+        ${imp.verifyDate?.toDate ? `<span>検証: ${imp.verifyDate.toDate().toLocaleDateString('ja-JP')}</span>` : ''}
+      </div>
+      ${effectHtml}
+      <div class="improvement-actions-row">${btns.join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function openCreateImprovementModal() {
+  const [processSnap, callTypeSnap] = await Promise.all([
+    tenantCol('processes').where('enabled', '==', true).get(),
+    tenantCol('callTypes').where('enabled', '==', true).get(),
+  ]);
+
+  const processSelect  = document.getElementById('imp-process');
+  const callTypeSelect = document.getElementById('imp-calltype');
+
+  processSelect.innerHTML = '<option value="">— 対象工程（任意）—</option>' +
+    processSnap.docs.map(d => `<option value="${d.id}" data-name="${d.data().name}">${d.data().name}${d.data().line ? ' / ' + d.data().line : ''}</option>`).join('');
+  callTypeSelect.innerHTML = '<option value="">— 対象種別（任意）—</option>' +
+    callTypeSnap.docs.map(d => `<option value="${d.data().name}">${d.data().name}</option>`).join('');
+
+  const updateBaseline = async () => {
+    const pid = processSelect.value;
+    const ct  = callTypeSelect.value;
+    const info = document.getElementById('imp-baseline-info');
+    if (!pid || !ct) { info.style.display = 'none'; return; }
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const snap = await tenantCol('cases')
+      .where('processId',    '==', pid)
+      .where('callTypeName', '==', ct)
+      .where('createdAt',    '>=', firebase.firestore.Timestamp.fromDate(since))
+      .get();
+    document.getElementById('imp-baseline-count').textContent = snap.size;
+    info.style.display = 'block';
+  };
+
+  processSelect.onchange  = updateBaseline;
+  callTypeSelect.onchange = updateBaseline;
+
+  ['imp-hypothesis', 'imp-action', 'imp-owner'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('imp-baseline-info').style.display = 'none';
+
+  openModal('modal-improvement');
+}
+
+async function createImprovement() {
+  const processSelect = document.getElementById('imp-process');
+  const processId     = processSelect.value;
+  const processName   = processSelect.options[processSelect.selectedIndex]?.dataset?.name || '';
+  const callType      = document.getElementById('imp-calltype').value;
+  const hypothesis    = document.getElementById('imp-hypothesis').value.trim();
+  const action        = document.getElementById('imp-action').value.trim();
+  const owner         = document.getElementById('imp-owner').value.trim();
+
+  if (!action) { showToast('対策内容を入力してください'); return; }
+
+  let baselineCount = 0;
+  if (processId && callType) {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const snap = await tenantCol('cases')
+      .where('processId',    '==', processId)
+      .where('callTypeName', '==', callType)
+      .where('createdAt',    '>=', firebase.firestore.Timestamp.fromDate(since))
+      .get();
+    baselineCount = snap.size;
+  }
+
+  await tenantCol('improvements').add({
+    targetProcessId:   processId   || null,
+    targetProcessName: processName || null,
+    targetCallType:    callType    || null,
+    hypothesis, action, owner,
+    status:      'planning',
+    baselineCount,
+    startDate:   null,
+    verifyDate:  null,
+    afterCount:  null,
+    effect:      null,
+    createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy:   currentUser.uid,
+  });
+
+  closeModal('modal-improvement');
+  loadImprovements();
+  showToast('改善アクションを作成しました');
+}
+
+async function advanceImprovement(id, newStatus) {
+  const imp = allImprovements.find(i => i.id === id);
+  if (!imp) return;
+
+  const updates = { status: newStatus, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+
+  if (newStatus === 'doing' && !imp.startDate) {
+    updates.startDate = firebase.firestore.FieldValue.serverTimestamp();
+  }
+
+  if (newStatus === 'verifying') {
+    updates.verifyDate = firebase.firestore.FieldValue.serverTimestamp();
+    if (imp.targetProcessId && imp.targetCallType && imp.startDate) {
+      const snap = await tenantCol('cases')
+        .where('processId',    '==', imp.targetProcessId)
+        .where('callTypeName', '==', imp.targetCallType)
+        .where('createdAt',    '>=', imp.startDate)
+        .get();
+      updates.afterCount = snap.size;
+      if (imp.baselineCount > 0) {
+        updates.effect = Math.round((1 - snap.size / imp.baselineCount) * 100);
+      }
+    }
+  }
+
+  if (newStatus === 'closed') {
+    updates.closedAt = firebase.firestore.FieldValue.serverTimestamp();
+  }
+
+  await tenantCol('improvements').doc(id).update(updates);
+  loadImprovements();
+  showToast('ステータスを更新しました');
+}
+
+async function deleteImprovement(id) {
+  if (!confirm('この改善アクションを削除しますか？')) return;
+  await tenantCol('improvements').doc(id).delete();
+  loadImprovements();
+  showToast('削除しました');
+}
+
+// =============================================
+let toastTimer = null;
+function showToast(msg, duration = 3000) {
+  const el = document.querySelector('.toast');
+  if (el) el.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), duration);
+}
+</script>
+
+<!--
+  ★ 別途必要なファイル ★
+
+  1. /firebase-messaging-sw.js  ← Service Worker（Push通知受信用）
+     importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+     importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+     firebase.initializeApp({ ... FIREBASE_CONFIG ... });
+     const messaging = firebase.messaging();
+     messaging.onBackgroundMessage(payload => {
+       self.registration.showNotification(
+         payload.notification.title,
+         { body: payload.notification.body, icon: '/icon.png' }
+       );
+     });
+
+  2. Cloud Functions (functions/index.js) ← Push送信ロジック
+     別途セットアップ手順を提供します
+
+  3. Firestore Security Rules ← 管理画面から適用
+-->
+</body>
+</html>

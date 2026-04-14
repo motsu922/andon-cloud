@@ -1,0 +1,24 @@
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Node.js
+functions/node_modules/
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.log

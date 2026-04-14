@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =============================================
+    // ヘルパー関数
+    // =============================================
+
+    // 対象テナントのメンバーか
+    function isMember(tenantId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid));
+    }
+
+    // 対象テナントの管理者か
+    function isAdmin(tenantId) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // =============================================
+    // テナントドキュメント
+    // =============================================
+    match /tenants/{tenantId} {
+
+      // テナント情報: メンバーなら読み取り可・書き込みは管理者のみ
+      allow read:  if isMember(tenantId);
+      allow write: if isAdmin(tenantId);
+
+      // ------------------------------------------
+      // ユーザー（メンバー）
+      // ------------------------------------------
+      match /users/{uid} {
+        // 自分自身 or 管理者なら読み取り可
+        allow read: if isMember(tenantId);
+
+        // ★ 書き込みはCloud Functions（Admin SDK）のみ
+        //   createMember / deleteMember / registerFCMToken
+        //   クライアントから直接書けないことで盗用防止
+        allow write: if false;
+      }
+
+      // ------------------------------------------
+      // 案件（呼び出し）
+      // ------------------------------------------
+      match /cases/{caseId} {
+        // メンバーなら読み取り可（onSnapshotのリアルタイム監視に必要）
+        allow read: if isMember(tenantId);
+
+        // ★ 書き込みはCloud Functions経由のみ
+        //   createCase / respondCase / completeCase / declineCase
+        allow write: if false;
+      }
+
+      // ------------------------------------------
+      // 工程・ライン
+      // ------------------------------------------
+      match /processes/{docId} {
+        // メンバーなら読み取り可
+        allow read: if isMember(tenantId);
+
+        // 管理者なら直接書き込み可（UIから設定するため）
+        allow write: if isAdmin(tenantId);
+      }
+
+      // ------------------------------------------
+      // 呼び出し種別
+      // ------------------------------------------
+      match /callTypes/{docId} {
+        allow read:  if isMember(tenantId);
+        allow write: if isAdmin(tenantId);
+      }
+
+      // ------------------------------------------
+      // システム（割り当て状態など）
+      // ------------------------------------------
+      match /system/{docId} {
+        // メンバーなら読み取り可
+        allow read: if isMember(tenantId);
+
+        // ★ 書き込みはCloud Functions経由のみ（autoAssignCaseトリガー）
+        allow write: if false;
+      }
+
+      // ------------------------------------------
+      // 改善アクション
+      // ------------------------------------------
+      match /improvements/{docId} {
+        // メンバーなら読み取り可（分析画面で参照）
+        allow read: if isMember(tenantId);
+
+        // 管理者のみ作成・更新・削除可
+        allow write: if isAdmin(tenantId);
+      }
+    }
+
+    // =============================================
+    // 上記以外はすべて拒否
+    // =============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "andon-app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "public", "--no-clipboard"],
+      "port": 3001,
+      "autoPort": true
+    }
+  ]
+}
