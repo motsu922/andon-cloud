@@ -522,16 +522,46 @@ exports.superCreateTenant = onCall({ region: "asia-northeast1" }, async (req) =>
 // =============================================
 // 15. 写真アップロード（CORS・Tracking Preventionを回避）
 // =============================================
+
+// Firebase Storage REST API は Firebase Auth IDトークンが必要
+// Admin SDK のカスタムトークン → IDトークン変換を使う
+const STORAGE_BUCKET   = "kouki-e7805.firebasestorage.app";
+const FIREBASE_API_KEY = "AIzaSyAJl87Z7mQNHCAJJ11HQC4BiJltF1ddUzk";
+let _cachedIdToken = null;
+let _tokenExpiry   = 0;
+
+async function getStorageIdToken() {
+  const now = Date.now();
+  if (_cachedIdToken && _tokenExpiry > now + 5 * 60 * 1000) return _cachedIdToken;
+
+  // Service account として Firebase カスタムトークンを発行
+  const customToken = await getAuth().createCustomToken("photo-upload-service");
+
+  // カスタムトークン → Firebase IDトークン に交換
+  const authRes = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+    }
+  );
+  const authData = await authRes.json();
+  if (!authRes.ok) throw new HttpsError("internal", `Auth error: ${JSON.stringify(authData)}`);
+
+  _cachedIdToken = authData.idToken;
+  _tokenExpiry   = now + (parseInt(authData.expiresIn) || 3600) * 1000;
+  return _cachedIdToken;
+}
+
 exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
   await assertMember(req.auth, req.data.tenantId);
 
   const { tenantId, photoBase64, mimeType } = req.data;
   if (!photoBase64) throw new HttpsError("invalid-argument", "photoBase64 is required");
 
-  // base64 ヘッダ除去
   const base64Data = photoBase64.replace(/^data:[^;]+;base64,/, "");
   const buffer = Buffer.from(base64Data, "base64");
-
   if (buffer.length > 10 * 1024 * 1024) {
     throw new HttpsError("invalid-argument", "10MB以下の画像を選択してください");
   }
@@ -539,19 +569,15 @@ exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
   const contentType = mimeType || "image/jpeg";
   const ext = contentType.split("/")[1] || "jpg";
   const fileName = `tenants/${tenantId}/cases/${Date.now()}_${req.auth.uid.substring(0, 6)}.${ext}`;
-
-  // Cloud Storage JSON API は firebasestorage.app バケットに非対応のため
-  // Firebase Storage REST API（ブラウザと同じエンドポイント）を使用
-  const BUCKET = "kouki-e7805.firebasestorage.app";
-  const { access_token } = await getApp().options.credential.getAccessToken();
-
   const encodedName = encodeURIComponent(fileName);
+
+  const idToken = await getStorageIdToken();
   const uploadRes = await fetch(
-    `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o?uploadType=media&name=${encodedName}`,
+    `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?uploadType=media&name=${encodedName}`,
     {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${access_token}`,
+        "Authorization": `Firebase ${idToken}`,
         "Content-Type": contentType,
       },
       body: buffer,
@@ -564,8 +590,8 @@ exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
   }
 
   const uploaded = await uploadRes.json();
-  // ダウンロードトークン付きURLを返す（認証不要で img タグから表示可能）
-  const photoURL = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodedName}?alt=media&token=${uploaded.downloadTokens}`;
+  // ダウンロードトークン付きURL（認証不要で <img> から表示可能）
+  const photoURL = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedName}?alt=media&token=${uploaded.downloadTokens}`;
   return { photoURL };
 });
 
