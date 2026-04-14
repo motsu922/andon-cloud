@@ -2087,7 +2087,7 @@ function renderMonitor(docs) {
         ${d.memo ? `<div class="case-meta-item"><span>メモ: </span>${d.memo}</div>` : ''}
       </div>
       ${d.photoURL ? `<img src="${d.photoURL}" onclick="viewPhoto('${d.photoURL}')"
-        style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;margin-top:10px;cursor:zoom-in;display:block;" alt="添付写真">` : ''}`;
+        style="width:100%;max-height:200px;object-fit:contain;background:#0d0f14;border-radius:8px;margin-top:10px;cursor:zoom-in;display:block;" alt="添付写真">` : ''}`;
     body.appendChild(card);
 
     // タイマー更新
@@ -2157,7 +2157,7 @@ function renderMobileList(containerId, docs, type) {
     const deptLabel = d.departmentName ? `<span style="color:var(--accent);font-size:11px;">→ ${d.departmentName}</span>` : '';
     const photoThumb = d.photoURL
       ? `<img src="${d.photoURL}" onclick="viewPhoto('${d.photoURL}')"
-           style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:zoom-in;display:block;"
+           style="width:100%;max-height:180px;object-fit:contain;background:#0d0f14;border-radius:8px;margin-top:8px;cursor:zoom-in;display:block;"
            alt="添付写真">`
       : '';
     card.innerHTML = `
