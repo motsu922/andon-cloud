@@ -1287,16 +1287,25 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
   </div>
 </div>
 
-<!-- モーダル: 自部署選択（モバイル用） -->
+<!-- モーダル: 自部署・担当者名設定（モバイル用） -->
 <div class="modal-backdrop" id="modal-dept-select">
   <div class="modal-box">
-    <div class="modal-title" id="dept-select-title">🏢 所属部署を選択</div>
+    <div class="modal-title" id="dept-select-title">👤 プロフィール設定</div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:16px;" id="dept-select-desc">
-      あなたの所属部署を選択してください。<br>選択した部署への呼び出しのみ通知が届きます。
+      担当者名と所属部署を設定してください。
     </p>
+    <div class="modal-fields" style="margin-bottom:20px;">
+      <div class="field">
+        <label>担当者名</label>
+        <input type="text" id="dept-select-name" placeholder="例：山田 太郎" autocomplete="name">
+      </div>
+    </div>
+    <label style="font-size:12px;color:var(--text2);margin-bottom:8px;display:block;">所属部署</label>
     <div id="dept-select-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="dept-select-error" style="color:var(--danger);font-size:12px;margin-top:10px;display:none;"></div>
     <div class="modal-actions" style="margin-top:20px;">
       <button class="btn btn-ghost" id="dept-select-cancel-btn" onclick="closeModal('modal-dept-select')" style="display:none;">キャンセル</button>
+      <button class="btn btn-primary" id="dept-select-save-btn" onclick="saveMobileProfile()" style="flex:1;">保存</button>
     </div>
   </div>
 </div>
@@ -2139,8 +2148,8 @@ function initMobileScreen() {
   checkPushPermission();
   subscribeMyCases();
 
-  // 初回：部署未設定なら必ず選択させる
-  if (!currentUserDoc.departmentId) {
+  // 初回：名前未設定 or 部署未設定なら必ず設定させる
+  if (!currentUserDoc.departmentId || !currentUserDoc.name) {
     openDeptSelectModal(true); // 初回フラグ=true（キャンセル不可）
   }
 }
@@ -2154,16 +2163,26 @@ function updateMobileDeptLabel() {
   }
 }
 
-async function openDeptSelectModal(isFirst = false) {
-  const list = document.getElementById('dept-select-list');
-  const cancelBtn = document.getElementById('dept-select-cancel-btn');
-  const desc = document.getElementById('dept-select-desc');
+// 部署選択で選択中の部署ID（保存ボタン押下まで確定しない）
+let _selectedDeptForProfile = null;
 
-  // 初回はキャンセル不可
+async function openDeptSelectModal(isFirst = false) {
+  const list       = document.getElementById('dept-select-list');
+  const cancelBtn  = document.getElementById('dept-select-cancel-btn');
+  const desc       = document.getElementById('dept-select-desc');
+  const nameInput  = document.getElementById('dept-select-name');
+  const errEl      = document.getElementById('dept-select-error');
+
+  _selectedDeptForProfile = currentUserDoc.departmentId
+    ? { id: currentUserDoc.departmentId, name: currentUserDoc.departmentName }
+    : null;
+
   cancelBtn.style.display = isFirst ? 'none' : 'inline-flex';
   desc.textContent = isFirst
-    ? 'あなたの所属部署を選択してください。選択した部署への呼び出しのみ通知が届きます。'
-    : '所属部署を変更します。';
+    ? '担当者名と所属部署を設定してください。設定した部署への呼び出しのみ通知が届きます。'
+    : '担当者名・所属部署を変更します。';
+  nameInput.value = currentUserDoc.name || '';
+  errEl.style.display = 'none';
 
   list.innerHTML = '<div style="color:var(--text2);font-size:13px;">読み込み中...</div>';
   openModal('modal-dept-select');
@@ -2178,34 +2197,69 @@ async function openDeptSelectModal(isFirst = false) {
 
   list.innerHTML = '';
   depts.forEach(dept => {
-    const isSelected = currentUserDoc.departmentId === dept.id;
     const btn = document.createElement('button');
+    btn.dataset.deptId = dept.id;
+    btn.dataset.deptName = dept.name;
+    const isSelected = currentUserDoc.departmentId === dept.id;
     btn.className = 'btn ' + (isSelected ? 'btn-primary' : 'btn-ghost');
     btn.style.cssText = 'width:100%;justify-content:flex-start;font-size:15px;padding:14px 18px;';
     btn.textContent = (isSelected ? '✓ ' : '') + dept.name;
-    btn.onclick = () => saveMobileDept(dept.id, dept.name);
+    btn.onclick = () => {
+      // 選択状態をトグル
+      document.querySelectorAll('#dept-select-list .btn').forEach(b => {
+        b.className = 'btn btn-ghost';
+        b.textContent = b.dataset.deptName;
+      });
+      btn.className = 'btn btn-primary';
+      btn.textContent = '✓ ' + dept.name;
+      _selectedDeptForProfile = { id: dept.id, name: dept.name };
+    };
     list.appendChild(btn);
   });
 }
 
-async function saveMobileDept(deptId, deptName) {
+async function saveMobileProfile() {
+  const name   = document.getElementById('dept-select-name').value.trim();
+  const errEl  = document.getElementById('dept-select-error');
+  const saveBtn = document.getElementById('dept-select-save-btn');
+
+  errEl.style.display = 'none';
+  if (!name) {
+    errEl.textContent = '担当者名を入力してください';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!_selectedDeptForProfile) {
+    errEl.textContent = '所属部署を選択してください';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = '保存中...';
   try {
     await superFn.updateMember({
       tenantId,
-      targetUid: currentUser.uid,
-      name: currentUserDoc.name,
-      role: currentUserDoc.role,
-      departmentId: deptId,
-      departmentName: deptName,
+      targetUid:      currentUser.uid,
+      name,
+      role:           currentUserDoc.role,
+      departmentId:   _selectedDeptForProfile.id,
+      departmentName: _selectedDeptForProfile.name,
     });
-    currentUserDoc.departmentId   = deptId;
-    currentUserDoc.departmentName = deptName;
+    currentUserDoc.name           = name;
+    currentUserDoc.departmentId   = _selectedDeptForProfile.id;
+    currentUserDoc.departmentName = _selectedDeptForProfile.name;
+    document.getElementById('mobile-user-name').textContent = name;
     updateMobileDeptLabel();
     closeModal('modal-dept-select');
-    showToast(`部署を「${deptName}」に設定しました`);
+    showToast('プロフィールを保存しました');
   } catch (e) {
     console.error(e);
-    showToast('部署の設定に失敗しました');
+    errEl.textContent = '保存に失敗しました。もう一度お試しください。';
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '保存';
   }
 }
 
