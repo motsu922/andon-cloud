@@ -12,6 +12,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 /* =============================================
@@ -403,9 +404,23 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
 /* QRコード招待 */
-.qr-area { text-align: center; padding: 24px; }
+.qr-area { text-align: center; padding: 16px 0 4px; }
 .qr-area canvas { border: 2px solid var(--border); border-radius: var(--r); }
 .qr-url { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-top: 8px; word-break: break-all; }
+
+/* URL カード */
+.url-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px;
+}
+.url-card-label { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 8px; }
+.url-link {
+  display: block; font-family: var(--mono); font-size: 11px;
+  color: var(--accent2); word-break: break-all;
+  text-decoration: none; margin-bottom: 8px;
+}
+.url-link:hover { text-decoration: underline; }
+.url-copy-btn { font-size: 12px; padding: 6px 14px; }
 
 /* 写真アップロード */
 .photo-upload-btn {
@@ -1030,21 +1045,31 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
           <button class="btn btn-primary" style="width:fit-content;" onclick="saveTenantName()">保存</button>
         </div>
       </div>
-      <div class="card" style="max-width:500px;">
-        <div style="font-size:16px;font-weight:700;margin-bottom:16px;">呼び出し画面URL</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div>
-            <label>呼び出し用（タブレット設置）</label>
-            <div class="qr-url" id="url-call"></div>
+      <div class="card" style="max-width:560px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:20px;">呼び出し画面URL</div>
+        <div style="display:flex;flex-direction:column;gap:24px;">
+
+          <div class="url-card">
+            <div class="url-card-label">📱 呼び出し用（タブレット設置）</div>
+            <a class="qr-url url-link" id="url-call" href="#" target="_blank"></a>
+            <button class="btn btn-ghost url-copy-btn" onclick="copyUrl('url-call')">コピー</button>
+            <div class="qr-area"><div id="qr-call"></div></div>
           </div>
-          <div>
-            <label>モニター用（大型ディスプレイ）</label>
-            <div class="qr-url" id="url-monitor"></div>
+
+          <div class="url-card">
+            <div class="url-card-label">🖥️ モニター用（大型ディスプレイ）</div>
+            <a class="qr-url url-link" id="url-monitor" href="#" target="_blank"></a>
+            <button class="btn btn-ghost url-copy-btn" onclick="copyUrl('url-monitor')">コピー</button>
+            <div class="qr-area"><div id="qr-monitor"></div></div>
           </div>
-          <div>
-            <label>担当者用（スマホ）</label>
-            <div class="qr-url" id="url-mobile"></div>
+
+          <div class="url-card">
+            <div class="url-card-label">📲 担当者用（スマホ）</div>
+            <a class="qr-url url-link" id="url-mobile" href="#" target="_blank"></a>
+            <button class="btn btn-ghost url-copy-btn" onclick="copyUrl('url-mobile')">コピー</button>
+            <div class="qr-area"><div id="qr-mobile"></div></div>
           </div>
+
         </div>
       </div>
     </div>
@@ -2297,14 +2322,39 @@ function initAdminScreen() {
     document.getElementById('tenant-plan-display').value = d.plan || 'trial';
 
     const base = `${location.origin}${location.pathname}?tenant=${tenantId}`;
-    document.getElementById('url-call').textContent    = `${base}&mode=call`;
-    document.getElementById('url-monitor').textContent = `${base}&mode=monitor`;
-    document.getElementById('url-mobile').textContent  = `${base}&mode=mobile`;
+    setUrlWithQR('url-call',    'qr-call',    `${base}&mode=call`);
+    setUrlWithQR('url-monitor', 'qr-monitor', `${base}&mode=monitor`);
+    setUrlWithQR('url-mobile',  'qr-mobile',  `${base}&mode=mobile`);
   });
 
   loadMembersTable();
   loadProcessesTable();
   loadCallTypesTable();
+}
+
+function setUrlWithQR(linkId, qrId, url) {
+  const a = document.getElementById(linkId);
+  a.href = url;
+  a.textContent = url;
+  const container = document.getElementById(qrId);
+  container.innerHTML = '';
+  new QRCode(container, {
+    text: url,
+    width: 160, height: 160,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+function copyUrl(linkId) {
+  const url = document.getElementById(linkId).href;
+  navigator.clipboard.writeText(url).then(() => showToast('URLをコピーしました')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = url; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('URLをコピーしました');
+  });
 }
 
 function adminTab(el, name) {
