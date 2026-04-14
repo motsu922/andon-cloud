@@ -34,6 +34,27 @@
   --r:         8px;
 }
 
+/* ライトテーマ */
+body.theme-light {
+  --bg:      #f0f2f5;
+  --surface: #ffffff;
+  --surface2:#e8ebf0;
+  --border:  #d0d5de;
+  --text:    #1a1f2e;
+  --text2:   #5a6478;
+}
+body.theme-light .btn-primary { color: #fff; }
+
+/* ミッドテーマ */
+body.theme-mid {
+  --bg:      #1a1f2e;
+  --surface: #242938;
+  --surface2:#2d3447;
+  --border:  #3a4255;
+  --text:    #e0e4f0;
+  --text2:   #7a86a0;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -618,6 +639,75 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
   border: 1px solid var(--border); text-align: center; font-size: 13px; transition: all .15s;
 }
 .rc-option:hover, .rc-option.selected { border-color: var(--accent); background: #f59e0b11; color: var(--accent); }
+/* =============================================
+   フローティングコントロール（テーマ・ガイド）
+============================================= */
+#floating-controls {
+  position: fixed; bottom: 16px; right: 16px; z-index: 8000;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+}
+.fc-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text2); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.fc-btn:hover { border-color: var(--accent); color: var(--accent); }
+.fc-btn.active { background: var(--accent); color: #0d0f14; border-color: var(--accent); }
+#theme-panel {
+  display: none; flex-direction: column; gap: 6px; align-items: flex-end;
+}
+#theme-panel.open { display: flex; }
+.theme-option {
+  padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text2); cursor: pointer; white-space: nowrap;
+  transition: all .15s;
+}
+.theme-option:hover, .theme-option.active { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
+
+/* =============================================
+   ガイドツールチップ
+============================================= */
+.guide-tip {
+  position: absolute; z-index: 7000;
+  background: var(--accent); color: #0d0f14;
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 12px; font-weight: 500; line-height: 1.5;
+  max-width: 220px; pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  animation: guide-pop .2s ease;
+}
+.guide-tip::before {
+  content: ''; position: absolute;
+  border: 6px solid transparent;
+}
+.guide-tip.tip-bottom::before {
+  top: -12px; left: 16px;
+  border-bottom-color: var(--accent);
+}
+.guide-tip.tip-top::before {
+  bottom: -12px; left: 16px;
+  border-top-color: var(--accent);
+}
+.guide-tip.tip-left::before {
+  right: -12px; top: 10px;
+  border-left-color: var(--accent);
+}
+@keyframes guide-pop {
+  from { opacity:0; transform: scale(.9); }
+  to   { opacity:1; transform: scale(1); }
+}
+.guide-overlay {
+  position: fixed; inset: 0; z-index: 6999;
+  background: rgba(0,0,0,.45);
+}
+.guide-highlight {
+  position: relative; z-index: 7001;
+  box-shadow: 0 0 0 4px var(--accent), 0 0 0 6px rgba(245,158,11,.3);
+  border-radius: 8px;
+}
 </style>
 </head>
 <body>
@@ -1423,9 +1513,179 @@ function tenantDoc(path) {
 }
 
 // =============================================
+// テーマ管理
+// =============================================
+const THEMES = ['dark','mid','light'];
+
+function setTheme(theme) {
+  document.body.classList.remove(...THEMES.map(t => `theme-${t}`));
+  if (theme !== 'dark') document.body.classList.add(`theme-${theme}`);
+  localStorage.setItem('andon-theme', theme);
+  document.querySelectorAll('.theme-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.theme === theme);
+  });
+}
+
+function toggleThemePanel() {
+  const panel = document.getElementById('theme-panel');
+  panel.classList.toggle('open');
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('andon-theme') || 'dark';
+  setTheme(saved);
+}
+
+// =============================================
+// ガイド（案内）管理
+// =============================================
+let guideOn = localStorage.getItem('andon-guide') !== 'off';
+let _guideCleanup = null;
+
+function toggleGuide() {
+  guideOn = !guideOn;
+  localStorage.setItem('andon-guide', guideOn ? 'on' : 'off');
+  const btn = document.getElementById('guide-toggle-btn');
+  btn.classList.toggle('active', guideOn);
+  if (guideOn) {
+    showToast('案内をONにしました');
+    runGuideForCurrentScreen();
+  } else {
+    clearGuide();
+    showToast('案内をOFFにしました');
+  }
+}
+
+function initGuideBtn() {
+  const btn = document.getElementById('guide-toggle-btn');
+  if (btn) btn.classList.toggle('active', guideOn);
+}
+
+function clearGuide() {
+  document.querySelectorAll('.guide-tip,.guide-overlay').forEach(el => el.remove());
+  document.querySelectorAll('.guide-highlight').forEach(el => el.classList.remove('guide-highlight'));
+  if (_guideCleanup) { _guideCleanup(); _guideCleanup = null; }
+}
+
+// ターゲット要素の近くにツールチップを表示する
+function showGuideTip(targetEl, text, position = 'bottom') {
+  if (!targetEl) return null;
+  targetEl.classList.add('guide-highlight');
+  const tip = document.createElement('div');
+  tip.className = `guide-tip tip-${position}`;
+  tip.textContent = text;
+  document.body.appendChild(tip);
+
+  const rect = targetEl.getBoundingClientRect();
+  if (position === 'bottom') {
+    tip.style.top  = (rect.bottom + window.scrollY + 14) + 'px';
+    tip.style.left = (rect.left  + window.scrollX) + 'px';
+  } else if (position === 'top') {
+    tip.style.top  = (rect.top + window.scrollY - tip.offsetHeight - 14) + 'px';
+    tip.style.left = (rect.left + window.scrollX) + 'px';
+  } else if (position === 'left') {
+    tip.style.top  = (rect.top + window.scrollY) + 'px';
+    tip.style.left = (rect.left + window.scrollX - 240) + 'px';
+  }
+  return tip;
+}
+
+// ステップ式ガイドを実行
+function runStepGuide(steps) {
+  clearGuide();
+  if (!guideOn || steps.length === 0) return;
+
+  let idx = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'guide-overlay';
+  document.body.appendChild(overlay);
+
+  function showStep() {
+    // 前のハイライト/チップをクリア
+    document.querySelectorAll('.guide-tip').forEach(el => el.remove());
+    document.querySelectorAll('.guide-highlight').forEach(el => el.classList.remove('guide-highlight'));
+
+    if (idx >= steps.length) { clearGuide(); return; }
+    const { sel, text, pos } = steps[idx];
+    const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+    if (!el) { idx++; showStep(); return; }
+
+    const tip = showGuideTip(el, text, pos || 'bottom');
+
+    // 次へボタンをtipに追加
+    const nav = document.createElement('div');
+    nav.style.cssText = 'margin-top:8px;display:flex;justify-content:flex-end;gap:6px;pointer-events:all;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '閉じる';
+    closeBtn.style.cssText = 'font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid rgba(0,0,0,.2);background:rgba(0,0,0,.15);cursor:pointer;';
+    closeBtn.onclick = () => clearGuide();
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = idx < steps.length - 1 ? `次へ (${idx+1}/${steps.length})` : '完了';
+    nextBtn.style.cssText = 'font-size:11px;padding:3px 10px;border-radius:4px;border:none;background:rgba(0,0,0,.2);cursor:pointer;font-weight:700;';
+    nextBtn.onclick = () => { idx++; showStep(); };
+    nav.appendChild(closeBtn);
+    nav.appendChild(nextBtn);
+    tip.appendChild(nav);
+    tip.style.pointerEvents = 'all';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  overlay.onclick = () => { idx++; showStep(); };
+  _guideCleanup = () => { overlay.remove(); };
+  showStep();
+}
+
+function runGuideForCurrentScreen() {
+  if (!guideOn) return;
+  const mode = getModeFromURL();
+  setTimeout(() => {
+    if      (mode === 'call')    runCallGuide();
+    else if (mode === 'monitor') runMonitorGuide();
+    else if (mode === 'mobile')  runMobileGuide();
+    else if (mode === 'admin')   runAdminGuide();
+  }, 400);
+}
+
+function runCallGuide() {
+  runStepGuide([
+    { sel: '.call-step.active', text: 'まずここから作業を選んでください。タップすると次のステップに進みます。', pos: 'bottom' },
+    { sel: '#floating-controls', text: '🎨 テーマ切替 / 💡 案内のON・OFFはここから操作できます。', pos: 'left' },
+  ]);
+}
+
+function runMonitorGuide() {
+  runStepGuide([
+    { sel: '.monitor-header', text: '対応中の件数をリアルタイムで表示します。大型ディスプレイへの設置を推奨します。', pos: 'bottom' },
+    { sel: '#monitor-cases', text: '呼び出し一覧です。新しい呼び出しが来ると自動で更新されます。', pos: 'bottom' },
+    { sel: '#floating-controls', text: '🎨 テーマ切替 / 💡 案内のON・OFFはここから操作できます。', pos: 'left' },
+  ]);
+}
+
+function runMobileGuide() {
+  runStepGuide([
+    { sel: '#avail-toggle', text: '「対応可」にするとあなたに呼び出しが割り当てられます。出勤時はONにしてください。', pos: 'bottom' },
+    { sel: '#mobile-dept-btn', text: 'あなたの所属部署です。ここをタップして変更できます。自部署の呼び出しのみ通知が届きます。', pos: 'bottom' },
+    { sel: '#push-notice', text: 'プッシュ通知を許可すると、呼び出しがあったときスマホに通知が届きます。', pos: 'bottom' },
+    { sel: '#mobile-assigned-list', text: 'あなたに割り当てられた呼び出しが表示されます。タップして対応を開始してください。', pos: 'bottom' },
+    { sel: '#floating-controls', text: '🎨 テーマ切替 / 💡 案内のON・OFFはここから操作できます。', pos: 'left' },
+  ]);
+}
+
+function runAdminGuide() {
+  runStepGuide([
+    { sel: '.admin-nav', text: 'タブでメンバー・工程・呼び出し種別などを管理できます。', pos: 'bottom' },
+    { sel: '[data-tab="members"]', text: 'メンバーの追加・削除・部署割り当てはここから行います。', pos: 'bottom' },
+    { sel: '[data-tab="departments"]', text: '部署の追加・編集はここから行います。モバイル担当者の通知先部署として使われます。', pos: 'bottom' },
+    { sel: '[data-tab="tenant"]', text: '呼び出し用URL・QRコードの確認はここから行います。各端末に貼り付けて使います。', pos: 'bottom' },
+    { sel: '#floating-controls', text: '🎨 テーマ切替 / 💡 案内のON・OFFはここから操作できます。', pos: 'left' },
+  ]);
+}
+
+// =============================================
 // 起動処理
 // =============================================
 window.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initGuideBtn();
   tenantId = getTenantIdFromURL();
   currentMode = getModeFromURL();
 
@@ -1510,6 +1770,7 @@ function routeToScreen() {
   if (currentMode === 'admin' && currentUserDoc.role === 'admin') {
     initAdminScreen();
     showScreen('admin');
+    runGuideForCurrentScreen();
     return;
   }
 
@@ -1525,6 +1786,7 @@ function routeToScreen() {
       break;
     default:        initMobileScreen();  showScreen('mobile');  break;
   }
+  runGuideForCurrentScreen();
 }
 
 // =============================================
@@ -3272,5 +3534,17 @@ function showToast(msg, duration = 3000) {
 
   3. Firestore Security Rules ← 管理画面から適用
 -->
+<!-- フローティングコントロール -->
+<div id="floating-controls">
+  <div id="theme-panel">
+    <button class="theme-option" data-theme="dark" onclick="setTheme('dark')">🌙 ダーク</button>
+    <button class="theme-option" data-theme="mid"  onclick="setTheme('mid')">🌤 ミッド</button>
+    <button class="theme-option" data-theme="light" onclick="setTheme('light')">☀️ ライト</button>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="fc-btn" id="guide-toggle-btn" title="案内ON/OFF" onclick="toggleGuide()">💡</button>
+    <button class="fc-btn" id="theme-toggle-btn" title="テーマ切替" onclick="toggleThemePanel()">🎨</button>
+  </div>
+</div>
 </body>
 </html>
