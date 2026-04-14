@@ -599,20 +599,17 @@ exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
 // Push通知ヘルパー（内部使用）
 // =============================================
 async function sendPushToMembers(tenantId, caseId, processName, callTypeName, departmentId) {
-  // 部署指定あり → その部署のメンバー優先。なければ全員にフォールバック
-  let query = db.collection(`tenants/${tenantId}/users`)
+  const membersSnap = await db.collection(`tenants/${tenantId}/users`)
     .where("enabled", "==", true)
-    .where("available", "==", true);
+    .where("available", "==", true)
+    .get();
 
-  let membersSnap = await query.get();
-
-  // 部署フィルタリング（クライアント側で）
   let targets = membersSnap.docs;
   if (departmentId) {
-    const deptTargets = targets.filter(d => d.data().departmentId === departmentId);
-    if (deptTargets.length > 0) targets = deptTargets;
-    // 対象がいなければ全員にフォールバック
+    // 部署指定あり → その部署のメンバーのみ（フォールバックなし）
+    targets = targets.filter(d => d.data().departmentId === departmentId);
   }
+  // 部署指定なし → 全員に通知
 
   const tokensWithDocs = targets
     .map(d => ({ token: d.data().fcmToken, doc: d }))
