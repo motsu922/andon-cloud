@@ -10,7 +10,7 @@ const { initializeApp }      = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging }       = require("firebase-admin/messaging");
 const { getAuth }            = require("firebase-admin/auth");
-const { getStorage }         = require("firebase-admin/storage");
+const { getApp }             = require("firebase-admin/app");
 
 initializeApp();
 const db  = getFirestore();
@@ -536,15 +536,36 @@ exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
     throw new HttpsError("invalid-argument", "10MB以下の画像を選択してください");
   }
 
-  const ext = (mimeType || "image/jpeg").split("/")[1] || "jpg";
+  const contentType = mimeType || "image/jpeg";
+  const ext = contentType.split("/")[1] || "jpg";
   const fileName = `tenants/${tenantId}/cases/${Date.now()}_${req.auth.uid.substring(0, 6)}.${ext}`;
 
-  const bucket = getStorage().bucket();
-  const file = bucket.file(fileName);
-  await file.save(buffer, { metadata: { contentType: mimeType || "image/jpeg" } });
-  await file.makePublic();
+  // Cloud Storage JSON API は firebasestorage.app バケットに非対応のため
+  // Firebase Storage REST API（ブラウザと同じエンドポイント）を使用
+  const BUCKET = "kouki-e7805.firebasestorage.app";
+  const { access_token } = await getApp().options.credential.getAccessToken();
 
-  const photoURL = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+  const encodedName = encodeURIComponent(fileName);
+  const uploadRes = await fetch(
+    `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o?uploadType=media&name=${encodedName}`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${access_token}`,
+        "Content-Type": contentType,
+      },
+      body: buffer,
+    }
+  );
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    throw new HttpsError("internal", `Storage upload failed: ${uploadRes.status} ${errText}`);
+  }
+
+  const uploaded = await uploadRes.json();
+  // ダウンロードトークン付きURLを返す（認証不要で img タグから表示可能）
+  const photoURL = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodedName}?alt=media&token=${uploaded.downloadTokens}`;
   return { photoURL };
 });
 
