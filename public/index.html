@@ -1118,6 +1118,11 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // IndexedDB がブロックされる環境（Edge等）ではセッションストレージにフォールバック
+  auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(() => {
+    auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {});
+  });
+
   // 5秒タイムアウト：Firebase接続に失敗した場合はログイン画面を表示
   const authTimeout = setTimeout(() => {
     console.warn('Auth timeout — showing login screen');
