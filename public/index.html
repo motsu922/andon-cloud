@@ -607,8 +607,8 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
 </head>
 <body>
 
-<!-- ローディング -->
-<div id="screen-loading" class="screen active">
+<!-- ローディング（初期は非表示） -->
+<div id="screen-loading" class="screen">
   <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
 </div>
 
@@ -623,6 +623,7 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
     </div>
 
     <div class="card login-form">
+      <div id="login-title" style="font-size:18px;font-weight:700;margin-bottom:16px;display:none;"></div>
       <div id="tenant-badge" style="margin-bottom:12px;display:none;">
         <label>テナント</label>
         <div style="font-weight:700;font-size:16px;" id="tenant-display"></div>
@@ -642,6 +643,66 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
     <div class="tenant-hint" id="no-tenant-hint" style="display:none;">
       URLに <strong>?tenant=テナントID</strong> が必要です
     </div>
+  </div>
+</div>
+
+<!-- ⑥ スーパー管理画面 -->
+<div id="screen-superadmin" class="screen">
+  <div class="admin-header">
+    <div class="logo">🛡️ 開発元管理画面</div>
+    <div style="color:var(--text2);font-size:13px;" id="super-admin-email"></div>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost" style="font-size:12px;" onclick="signOutUser()">ログアウト</button>
+  </div>
+
+  <div class="admin-nav">
+    <div class="admin-nav-item active" onclick="superTab(this,'tenants')">テナント一覧</div>
+    <div class="admin-nav-item" onclick="superTab(this,'create')">テナント新規作成</div>
+  </div>
+
+  <div class="admin-body">
+
+    <!-- テナント一覧 -->
+    <div class="admin-tab active" id="super-tab-tenants">
+      <div class="admin-section-header">
+        <div class="admin-section-title">テナント一覧</div>
+        <button class="btn btn-ghost" style="font-size:12px;" onclick="loadSuperTenants()">↺ 更新</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table">
+          <thead><tr>
+            <th>テナントID</th><th>会社名</th><th>プラン</th>
+            <th>メンバー</th><th>累計呼び出し</th><th>作成日</th><th>操作</th>
+          </tr></thead>
+          <tbody id="super-tenants-tbody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px;">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- テナント新規作成 -->
+    <div class="admin-tab" id="super-tab-create">
+      <div class="card" style="max-width:500px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:20px;">テナント新規作成</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="field"><label>テナントID <span style="color:var(--text2);font-size:11px;">（英数字・ハイフン3〜30文字）</span></label>
+            <input type="text" id="super-new-tenant-id" placeholder="example-factory"></div>
+          <div class="field"><label>会社名</label>
+            <input type="text" id="super-new-tenant-name" placeholder="○○製作所"></div>
+          <div style="border-top:1px solid var(--border);padding-top:14px;font-size:13px;font-weight:600;color:var(--text2);">管理者アカウント</div>
+          <div class="field"><label>管理者名</label>
+            <input type="text" id="super-new-admin-name" placeholder="山田 太郎"></div>
+          <div class="field"><label>メールアドレス</label>
+            <input type="email" id="super-new-admin-email" placeholder="admin@example.com"></div>
+          <div class="field"><label>初期パスワード</label>
+            <input type="password" id="super-new-admin-pass" placeholder="8文字以上"></div>
+          <div id="super-create-error" class="error-msg" style="display:none;"></div>
+          <button class="btn btn-primary" style="width:fit-content;" onclick="superCreateTenant()">作成する</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1029,10 +1090,16 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
     <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0;" id="chat-messages">
       <div style="color:var(--text2);font-size:12px;text-align:center;">メッセージを読み込んでいます...</div>
     </div>
-    <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;gap:8px;margin-top:8px;">
-      <input type="text" id="chat-input" placeholder="メッセージを入力..." style="flex:1;"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}">
-      <button class="btn btn-primary" onclick="sendChatMessage()">送信</button>
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span id="chat-speaker-label" style="font-size:12px;color:var(--text2);">発言者: —</span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;" onclick="chatSpeaker=null;openSpeakerSelectModal(currentChatCaseId, document.getElementById('chat-modal-title').textContent.replace('💬 ',''))">変更</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="chat-input" placeholder="メッセージを入力..." style="flex:1;"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}">
+        <button class="btn btn-primary" onclick="sendChatMessage()">送信</button>
+      </div>
     </div>
     <div style="margin-top:8px;">
       <button class="btn btn-ghost" style="width:100%;" onclick="closeModal('modal-chat')">閉じる</button>
@@ -1057,6 +1124,67 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-complete')">キャンセル</button>
       <button class="btn btn-success" onclick="submitComplete()">✅ 完了として記録</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: プラン変更（スーパー管理者用） -->
+<div class="modal-backdrop" id="modal-plan">
+  <div class="modal-box">
+    <div class="modal-title" id="plan-modal-title">プラン変更</div>
+    <div class="modal-fields">
+      <div class="field">
+        <label>プラン</label>
+        <select id="plan-select">
+          <option value="trial">trial（無料トライアル・5メンバー）</option>
+          <option value="starter">starter（20メンバー）</option>
+          <option value="standard">standard（無制限）</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-plan')">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitPlanChange()">変更</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: メンバー編集（部署・権限） -->
+<div class="modal-backdrop" id="modal-edit-member">
+  <div class="modal-box">
+    <div class="modal-title">メンバー編集</div>
+    <div class="modal-fields">
+      <div class="field"><label>名前</label>
+        <input type="text" id="edit-member-name"></div>
+      <div class="field">
+        <label>権限</label>
+        <select id="edit-member-role">
+          <option value="member">メンバー（現場担当）</option>
+          <option value="admin">管理者</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>所属部署</label>
+        <select id="edit-member-dept">
+          <option value="">（未設定）</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-member')">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitEditMember()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: チャット発言者選択 -->
+<div class="modal-backdrop" id="modal-chat-speaker">
+  <div class="modal-box">
+    <div class="modal-title">発言者を選択</div>
+    <div style="color:var(--text2);font-size:12px;margin-bottom:12px;">この端末を使用しているのは誰ですか？</div>
+    <div id="speaker-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chat-speaker')">キャンセル</button>
     </div>
   </div>
 </div>
@@ -1236,41 +1364,66 @@ window.addEventListener('DOMContentLoaded', () => {
   tenantId = getTenantIdFromURL();
   currentMode = getModeFromURL();
 
+  // スーパー管理者モード（tenantなし）
+  if (currentMode === 'superadmin') {
+    showScreen('login');
+    document.getElementById('tenant-badge').style.display = 'none';
+    const _lt = document.getElementById('login-title');
+    _lt.textContent = '🛡️ 開発元 管理画面';
+    _lt.style.display = 'block';
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) return;
+      try {
+        currentUser = user;
+        const snap = await db.doc(`superAdmins/${user.uid}`).get();
+        if (!snap.exists) {
+          showToast('スーパー管理者権限がありません');
+          auth.signOut();
+          return;
+        }
+        currentUserDoc = { name: user.email, role: 'superadmin' };
+        initSuperAdminScreen();
+        showScreen('superadmin');
+      } catch (e) {
+        console.error(e);
+        auth.signOut().catch(() => {});
+        showScreen('login');
+      }
+    });
+    return;
+  }
+
   if (!tenantId) {
     showScreen('login');
     document.getElementById('no-tenant-hint').style.display = 'block';
     return;
   }
 
-  // IndexedDB がブロックされる環境（Edge等）ではセッションストレージにフォールバック
-  auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(() => {
-    auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {});
+  // まずログイン画面を表示（Edge等でIndexedDBがブロックされても止まらない）
+  showScreen('login');
+
+  // テナント名を非同期で取得して表示
+  db.collection('tenants').doc(tenantId).get().catch(() => null).then(snap => {
+    if (snap && snap.exists) {
+      document.getElementById('tenant-display').textContent = snap.data().name || tenantId;
+      document.getElementById('tenant-badge').style.display = 'block';
+    }
   });
 
-  // 5秒タイムアウト：Firebase接続に失敗した場合はログイン画面を表示
-  const authTimeout = setTimeout(() => {
-    console.warn('Auth timeout — showing login screen');
-    showScreen('login');
-  }, 5000);
-
+  // Auth状態を監視：ログイン済みなら自動遷移
   auth.onAuthStateChanged(async (user) => {
-    clearTimeout(authTimeout);
+    if (!user) return;
     try {
-      if (user) {
-        currentUser = user;
-        await loadUserDoc();
-        routeToScreen();
-      } else {
-        // テナント情報を表示
-        const tenantSnap = await db.collection('tenants').doc(tenantId).get().catch(() => null);
-        if (tenantSnap && tenantSnap.exists) {
-          document.getElementById('tenant-display').textContent = tenantSnap.data().name || tenantId;
-          document.getElementById('tenant-badge').style.display = 'block';
-        }
-        showScreen('login');
-      }
+      currentUser = user;
+      await Promise.race([
+        loadUserDoc(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+      ]);
+      routeToScreen();
     } catch (e) {
       console.error('Auth routing error:', e);
+      currentUser = null;
+      auth.signOut().catch(() => {});
       showScreen('login');
     }
   });
@@ -1366,6 +1519,216 @@ document.addEventListener('keydown', e => {
     doLogin();
   }
 });
+
+// =============================================
+// ⑥ スーパー管理画面
+// =============================================
+const superFn = {
+  listTenants:   functions.httpsCallableFromURL('https://superlisttenants-svesbeblda-an.a.run.app'),
+  updatePlan:    functions.httpsCallableFromURL('https://superupdateplan-svesbeblda-an.a.run.app'),
+  createTenant:  functions.httpsCallableFromURL('https://supercreatetenant-svesbeblda-an.a.run.app'),
+  updateMember:  functions.httpsCallableFromURL('https://updatemember-svesbeblda-an.a.run.app'),
+};
+
+function initSuperAdminScreen() {
+  document.getElementById('super-admin-email').textContent = currentUser.email;
+  loadSuperTenants();
+}
+
+function superTab(el, name) {
+  document.querySelectorAll('#screen-superadmin .admin-nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('#screen-superadmin .admin-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`super-tab-${name}`).classList.add('active');
+}
+
+async function loadSuperTenants() {
+  const tbody = document.getElementById('super-tenants-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px;"><span class="spinner"></span></td></tr>`;
+  try {
+    const res = await superFn.listTenants({});
+    const tenants = res.data.tenants;
+    tbody.innerHTML = '';
+    if (tenants.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:24px;">テナントなし</td></tr>`;
+      return;
+    }
+    tenants.forEach(t => {
+      const planColors = { trial: 'var(--text2)', starter: 'var(--accent2)', standard: 'var(--success)' };
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-family:var(--mono);font-size:12px;">${t.id}</td>
+        <td style="font-weight:600;">${t.name}</td>
+        <td><span style="color:${planColors[t.plan]||'var(--text2)'};font-weight:600;">${t.plan}</span></td>
+        <td style="text-align:center;">${t.memberCount}</td>
+        <td style="text-align:center;">${t.caseCount}</td>
+        <td style="color:var(--text2);font-size:12px;">${t.createdAt ? new Date(t.createdAt).toLocaleDateString('ja-JP') : '—'}</td>
+        <td>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
+            onclick="openPlanModal('${t.id}','${t.plan}','${t.name}')">プラン変更</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);padding:16px;">${e.message}</td></tr>`;
+  }
+}
+
+let planChangeTenantId = null;
+function openPlanModal(tenantId, currentPlan, tenantName) {
+  planChangeTenantId = tenantId;
+  document.getElementById('plan-modal-title').textContent = `プラン変更 — ${tenantName}`;
+  document.getElementById('plan-select').value = currentPlan;
+  openModal('modal-plan');
+}
+
+async function submitPlanChange() {
+  if (!planChangeTenantId) return;
+  const plan = document.getElementById('plan-select').value;
+  try {
+    await superFn.updatePlan({ tenantId: planChangeTenantId, plan });
+    closeModal('modal-plan');
+    showToast(`プランを ${plan} に変更しました`);
+    loadSuperTenants();
+  } catch(e) {
+    showToast('変更失敗: ' + e.message);
+  }
+}
+
+async function superCreateTenant() {
+  const tid   = document.getElementById('super-new-tenant-id').value.trim();
+  const tname = document.getElementById('super-new-tenant-name').value.trim();
+  const aname = document.getElementById('super-new-admin-name').value.trim();
+  const email = document.getElementById('super-new-admin-email').value.trim();
+  const pass  = document.getElementById('super-new-admin-pass').value;
+  const errEl = document.getElementById('super-create-error');
+  errEl.style.display = 'none';
+
+  if (!tid || !tname || !aname || !email || !pass) {
+    showError(errEl, '全項目を入力してください'); return;
+  }
+  if (pass.length < 8) { showError(errEl, 'パスワードは8文字以上'); return; }
+
+  try {
+    await superFn.createTenant({ tenantId: tid, tenantName: tname, adminEmail: email, adminPassword: pass, adminName: aname });
+    showToast(`テナント「${tname}」を作成しました`);
+    ['super-new-tenant-id','super-new-tenant-name','super-new-admin-name','super-new-admin-email','super-new-admin-pass']
+      .forEach(id => document.getElementById(id).value = '');
+    superTab(document.querySelector('#screen-superadmin .admin-nav-item'), 'tenants');
+    loadSuperTenants();
+  } catch(e) {
+    showError(errEl, e.message);
+  }
+}
+
+// =============================================
+// メンバー編集（部署・権限変更）
+// =============================================
+let editMemberUid = null;
+
+async function openEditMemberModal(uid, name, role, deptId) {
+  editMemberUid = uid;
+  document.getElementById('edit-member-name').value = name;
+  document.getElementById('edit-member-role').value = role || 'member';
+
+  // 部署セレクトを動的ロード
+  const deptSel = document.getElementById('edit-member-dept');
+  deptSel.innerHTML = '<option value="">（未設定）</option>';
+  const snap = await tenantCol('departments').where('enabled','==',true).orderBy('order','asc').get();
+  snap.forEach(doc => {
+    const opt = document.createElement('option');
+    opt.value = doc.id;
+    opt.textContent = doc.data().name;
+    if (doc.id === deptId) opt.selected = true;
+    deptSel.appendChild(opt);
+  });
+
+  openModal('modal-edit-member');
+}
+
+async function submitEditMember() {
+  if (!editMemberUid) return;
+  const name   = document.getElementById('edit-member-name').value.trim();
+  const role   = document.getElementById('edit-member-role').value;
+  const deptSel = document.getElementById('edit-member-dept');
+  const deptId   = deptSel.value || null;
+  const deptName = deptId ? deptSel.options[deptSel.selectedIndex].text : null;
+
+  if (!name) { showToast('名前を入力してください'); return; }
+
+  try {
+    await superFn.updateMember({ tenantId, targetUid: editMemberUid, name, role, departmentId: deptId, departmentName: deptName });
+    closeModal('modal-edit-member');
+    loadMembersTable();
+    showToast('メンバー情報を更新しました');
+  } catch(e) {
+    showToast('更新失敗: ' + e.message);
+  }
+}
+
+// =============================================
+// チャット発言者選択
+// =============================================
+let chatSpeaker = null; // { uid, name } — 端末共用時に選択
+
+function openChatModal(caseId, title) {
+  currentChatCaseId = caseId;
+  document.getElementById('chat-modal-title').textContent = `💬 ${title}`;
+
+  // 発言者が未設定ならまず選択モーダルを表示
+  if (!chatSpeaker) {
+    openSpeakerSelectModal(caseId, title);
+    return;
+  }
+  _openChatModalDirect();
+}
+
+async function openSpeakerSelectModal(caseId, title) {
+  const list = document.getElementById('speaker-list');
+  list.innerHTML = '<div style="color:var(--text2);font-size:12px;">読み込み中...</div>';
+  openModal('modal-chat-speaker');
+
+  const snap = await tenantCol('users').where('enabled','==',true).get();
+  list.innerHTML = '';
+  snap.forEach(doc => {
+    const d = doc.data();
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost';
+    btn.style.cssText = 'width:100%;text-align:left;padding:12px 16px;font-size:14px;';
+    btn.innerHTML = `<strong>${d.name}</strong><span style="color:var(--text2);font-size:11px;margin-left:8px;">${d.role === 'admin' ? '管理者' : 'メンバー'} ${d.departmentName ? '/ ' + d.departmentName : ''}</span>`;
+    btn.onclick = () => {
+      chatSpeaker = { uid: doc.id, name: d.name };
+      closeModal('modal-chat-speaker');
+      _openChatModalDirect();
+    };
+    list.appendChild(btn);
+  });
+
+  // 「自分として発言」ボタン（ログイン中ユーザー）
+  if (currentUser) {
+    const selfBtn = document.createElement('button');
+    selfBtn.className = 'btn btn-primary';
+    selfBtn.style.cssText = 'width:100%;margin-top:8px;';
+    selfBtn.textContent = `自分（${currentUserDoc?.name || currentUser.email}）として発言`;
+    selfBtn.onclick = () => {
+      chatSpeaker = { uid: currentUser.uid, name: currentUserDoc?.name || currentUser.email };
+      closeModal('modal-chat-speaker');
+      _openChatModalDirect();
+    };
+    list.appendChild(selfBtn);
+  }
+}
+
+function _openChatModalDirect() {
+  document.getElementById('chat-messages').innerHTML =
+    `<div style="color:var(--text2);font-size:12px;text-align:center;">読み込み中...</div>`;
+  document.getElementById('chat-input').value = '';
+  // 発言者表示
+  const speakerEl = document.getElementById('chat-speaker-label');
+  if (speakerEl) speakerEl.textContent = `発言者: ${chatSpeaker?.name || '—'}`;
+  openModal('modal-chat');
+  subscribeChatMessages(currentChatCaseId);
+}
 
 function signOutUser() {
   if (!confirm('ログアウトしますか？')) return;
@@ -1769,10 +2132,11 @@ async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text || !currentChatCaseId) return;
+  if (!chatSpeaker) { showToast('発言者を選択してください'); return; }
   input.value = '';
   await db.collection(`tenants/${tenantId}/cases/${currentChatCaseId}/messages`).add({
-    uid:       currentUser.uid,
-    name:      currentUserDoc.name || currentUser.email,
+    uid:       chatSpeaker.uid,
+    name:      chatSpeaker.name,
     text,
     photoURL:  null,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1972,9 +2336,11 @@ async function loadMembersTable() {
   tbody.innerHTML = '';
   snap.forEach(doc => {
     const d = doc.data();
+    const deptLabel = d.departmentName
+      ? `<span style="font-size:11px;color:var(--accent);margin-left:4px;">${d.departmentName}</span>` : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${d.name || '—'}</td>
+      <td>${d.name || '—'}${deptLabel}</td>
       <td style="color:var(--text2);font-size:12px;">${d.email || '—'}</td>
       <td>${d.role === 'admin' ? '管理者' : 'メンバー'}</td>
       <td>
@@ -1983,10 +2349,14 @@ async function loadMembersTable() {
           ${d.available !== false ? '対応可' : '待機中'}
         </span>
       </td>
-      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" 
+      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
           onclick="showInviteInfo('${doc.id}','${(d.email||'').replace(/'/g,"\\'")}')">招待URL</button></td>
-      <td><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);"
-          onclick="deleteMember('${doc.id}')">削除</button></td>`;
+      <td style="display:flex;gap:4px;">
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
+          onclick="openEditMemberModal('${doc.id}','${(d.name||'').replace(/'/g,"\\'")}','${d.role||'member'}','${d.departmentId||''}')">編集</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger);"
+          onclick="deleteMember('${doc.id}')">削除</button>
+      </td>`;
     tbody.appendChild(tr);
   });
 }

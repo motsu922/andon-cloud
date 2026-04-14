@@ -387,6 +387,138 @@ exports.initTenant = onCall({ region: "asia-northeast1" }, async (req) => {
 });
 
 // =============================================
+// 10. メンバー情報更新（管理者専用）
+// =============================================
+exports.updateMember = onCall({ region: "asia-northeast1" }, async (req) => {
+  const { tenantId, targetUid, name, role, departmentId, departmentName, available } = req.data;
+  await assertAdmin(req.auth, tenantId);
+
+  const updates = {};
+  if (name           !== undefined) updates.name           = name;
+  if (role           !== undefined) updates.role           = role;
+  if (departmentId   !== undefined) updates.departmentId   = departmentId;
+  if (departmentName !== undefined) updates.departmentName = departmentName;
+  if (available      !== undefined) updates.available      = available;
+
+  await db.doc(`tenants/${tenantId}/users/${targetUid}`).update(updates);
+
+  // 権限変更時はFirebase Auth displayNameも更新
+  if (name) await getAuth().updateUser(targetUid, { displayName: name }).catch(() => {});
+
+  return { ok: true };
+});
+
+// =============================================
+// 11. スーパー管理者チェックヘルパー
+// =============================================
+async function assertSuperAdmin(auth) {
+  if (!auth) throw new HttpsError("unauthenticated", "ログインが必要です");
+  const snap = await db.doc(`superAdmins/${auth.uid}`).get();
+  if (!snap.exists) throw new HttpsError("permission-denied", "スーパー管理者権限が必要です");
+}
+
+// =============================================
+// 12. テナント一覧取得（スーパー管理者専用）
+// =============================================
+exports.superListTenants = onCall({ region: "asia-northeast1" }, async (req) => {
+  await assertSuperAdmin(req.auth);
+
+  const snap = await db.collection("tenants").get();
+  const tenants = await Promise.all(snap.docs.map(async doc => {
+    const d = doc.data();
+    const [membersSnap, casesSnap] = await Promise.all([
+      db.collection(`tenants/${doc.id}/users`).count().get(),
+      db.collection(`tenants/${doc.id}/cases`).count().get(),
+    ]);
+    return {
+      id:         doc.id,
+      name:       d.name || doc.id,
+      plan:       d.plan || "trial",
+      createdAt:  d.createdAt?.toDate?.()?.toISOString() || null,
+      memberCount: membersSnap.data().count,
+      caseCount:   casesSnap.data().count,
+    };
+  }));
+
+  return { tenants };
+});
+
+// =============================================
+// 13. プラン変更（スーパー管理者専用）
+// =============================================
+exports.superUpdatePlan = onCall({ region: "asia-northeast1" }, async (req) => {
+  const { tenantId, plan } = req.data;
+  await assertSuperAdmin(req.auth);
+
+  const validPlans = ["trial", "starter", "standard"];
+  if (!validPlans.includes(plan)) throw new HttpsError("invalid-argument", "無効なプランです");
+
+  await db.doc(`tenants/${tenantId}`).update({ plan });
+  return { ok: true };
+});
+
+// =============================================
+// 14. テナント新規作成（スーパー管理者専用）
+// =============================================
+exports.superCreateTenant = onCall({ region: "asia-northeast1" }, async (req) => {
+  await assertSuperAdmin(req.auth);
+
+  const { tenantId, tenantName, adminEmail, adminPassword, adminName } = req.data;
+
+  if (!/^[a-z0-9-]{3,30}$/.test(tenantId)) {
+    throw new HttpsError("invalid-argument", "テナントIDは英数字・ハイフン3〜30文字");
+  }
+  const existing = await db.doc(`tenants/${tenantId}`).get();
+  if (existing.exists) throw new HttpsError("already-exists", "このテナントIDは使用済みです");
+
+  // Firebase Auth に管理者ユーザーを作成
+  const userRecord = await getAuth().createUser({
+    email: adminEmail, password: adminPassword, displayName: adminName,
+  });
+
+  // テナント作成
+  await db.doc(`tenants/${tenantId}`).set({
+    name: tenantName, plan: "trial",
+    trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: req.auth.uid,
+  });
+
+  // 管理者登録
+  await db.doc(`tenants/${tenantId}/users/${userRecord.uid}`).set({
+    name: adminName, email: adminEmail, role: "admin",
+    enabled: true, available: true, priority: 50,
+    fcmToken: null, departmentId: null, departmentName: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  // デフォルト呼び出し種別
+  for (const ct of [
+    { name: "品質確認", priority: "normal" },
+    { name: "設備故障", priority: "urgent" },
+    { name: "材料補充", priority: "normal" },
+    { name: "その他",   priority: "normal" },
+  ]) {
+    await db.collection(`tenants/${tenantId}/callTypes`).add({
+      ...ct, enabled: true, createdAt: FieldValue.serverTimestamp()
+    });
+  }
+
+  // デフォルト部署
+  for (const [i, dept] of [
+    { name: "生技・品質", isDefault: true  },
+    { name: "製造",       isDefault: false },
+    { name: "設備保全",   isDefault: false },
+  ].entries()) {
+    await db.collection(`tenants/${tenantId}/departments`).add({
+      ...dept, order: i + 1, enabled: true, createdAt: FieldValue.serverTimestamp()
+    });
+  }
+
+  return { ok: true, tenantId, adminUid: userRecord.uid };
+});
+
+// =============================================
 // Push通知ヘルパー（内部使用）
 // =============================================
 async function sendPushToMembers(tenantId, caseId, processName, callTypeName, departmentId) {

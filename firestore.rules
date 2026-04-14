@@ -18,14 +18,26 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // スーパー管理者か（開発元）
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/superAdmins/$(request.auth.uid));
+    }
+
     // =============================================
     // テナントドキュメント
     // =============================================
+    // スーパー管理者ドキュメント（開発元のみ読み取り可・書き込み不可）
+    match /superAdmins/{uid} {
+      allow read:  if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     match /tenants/{tenantId} {
 
-      // テナント情報: メンバーなら読み取り可・書き込みは管理者のみ
-      allow read:  if isMember(tenantId);
-      allow write: if isAdmin(tenantId);
+      // テナント情報: メンバーまたはスーパー管理者が読み取り可
+      allow read:  if isMember(tenantId) || isSuperAdmin();
+      allow write: if isAdmin(tenantId)  || isSuperAdmin();
 
       // ------------------------------------------
       // ユーザー（メンバー）
