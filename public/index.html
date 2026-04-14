@@ -479,9 +479,27 @@ label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block
   background: var(--surface2); border: 1px solid var(--border);
   color: var(--text); padding: 6px 14px; border-radius: var(--r);
   font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  position: relative;
 }
 .btn-chat:hover { border-color: var(--accent2); color: var(--accent2); }
 .chat-unread { display: inline-block; background: var(--danger); color: #fff; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; text-align: center; line-height: 16px; }
+
+/* チャット未読バッジ */
+.chat-badge {
+  position: absolute; top: -7px; right: -7px;
+  background: var(--danger); color: #fff;
+  border-radius: 10px; min-width: 18px; height: 18px;
+  font-size: 11px; font-weight: 700; line-height: 18px;
+  text-align: center; padding: 0 4px;
+  border: 2px solid var(--bg);
+  animation: badge-pop .2s ease;
+  pointer-events: none;
+}
+@keyframes badge-pop {
+  0%   { transform: scale(0); }
+  70%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
 
 /* =============================================
    ローディング
@@ -2472,9 +2490,10 @@ function renderCallActiveList(docs) {
           ${respondedInfo}
         </div>
       </div>
-      <button class="btn-chat" style="white-space:nowrap;"
+      <button class="btn-chat" style="white-space:nowrap;" data-case-id="${doc.id}"
         onclick="openChatModal('${doc.id}','${title.replace(/'/g,"\\'")}')">💬 チャット</button>`;
     list.appendChild(card);
+    subscribeChatBadge(doc.id);
   });
 }
 
@@ -2781,13 +2800,79 @@ function renderMobileList(containerId, docs, type) {
       <div class="mobile-case-meta">${d.processLine || ''} ${d.memo ? '— ' + d.memo : ''}</div>
       ${photoThumb}
       <div class="mobile-case-actions" style="flex-wrap:wrap;gap:6px;margin-top:${d.photoURL ? '8px' : '0'};">
-        <button class="btn-chat" onclick="openChatModal('${doc.id}','${(d.processName||'').replace(/'/g,"\\'")} / ${(d.callTypeName||'').replace(/'/g,"\\'")}')">💬 チャット</button>
+        <button class="btn-chat" data-case-id="${doc.id}" onclick="openChatModal('${doc.id}','${(d.processName||'').replace(/'/g,"\\'")} / ${(d.callTypeName||'').replace(/'/g,"\\'")}')">💬 チャット</button>
         ${type === 'assigned'
           ? `<button class="btn btn-primary" onclick="respondCase('${doc.id}')">対応開始</button>
              <button class="btn btn-ghost" onclick="declineCase('${doc.id}')">対応不可</button>`
           : `<button class="btn btn-success" onclick="openCompleteModal('${doc.id}')">完了</button>`}
       </div>`;
     el.appendChild(card);
+    subscribeChatBadge(doc.id);
+  });
+}
+
+// =============================================
+// チャット未読管理
+// =============================================
+// { caseId: epochMs } — チャットを最後に開いた時刻をlocalStorageに保存
+const CHAT_READ_KEY = `andon-chat-read-${location.search}`;
+let _chatReadMap = {};
+try { _chatReadMap = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}'); } catch(e) {}
+
+// 未読購読: { caseId -> unsubscribe }
+const _chatBadgeUnsubs = {};
+
+function markChatRead(caseId) {
+  _chatReadMap[caseId] = Date.now();
+  localStorage.setItem(CHAT_READ_KEY, JSON.stringify(_chatReadMap));
+  updateChatBadge(caseId, 0);
+}
+
+function updateChatBadge(caseId, count) {
+  document.querySelectorAll(`.btn-chat[data-case-id="${caseId}"]`).forEach(btn => {
+    let badge = btn.querySelector('.chat-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'chat-badge';
+        btn.appendChild(badge);
+      }
+      badge.textContent = count > 99 ? '99+' : String(count);
+    } else {
+      if (badge) badge.remove();
+    }
+  });
+}
+
+// ケースのメッセージを購読して未読数を計算
+function subscribeChatBadge(caseId) {
+  if (_chatBadgeUnsubs[caseId]) return; // すでに購読中
+  const unsub = db.collection(`tenants/${tenantId}/cases/${caseId}/messages`)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      const lastRead = _chatReadMap[caseId] || 0;
+      let unread = 0;
+      snap.forEach(doc => {
+        const m = doc.data();
+        const ts = m.createdAt?.toDate ? m.createdAt.toDate().getTime() : 0;
+        if (ts > lastRead) unread++;
+      });
+      updateChatBadge(caseId, unread);
+    });
+  _chatBadgeUnsubs[caseId] = unsub;
+}
+
+function unsubscribeChatBadge(caseId) {
+  if (_chatBadgeUnsubs[caseId]) {
+    _chatBadgeUnsubs[caseId]();
+    delete _chatBadgeUnsubs[caseId];
+  }
+}
+
+function unsubscribeAllChatBadges() {
+  Object.keys(_chatBadgeUnsubs).forEach(id => {
+    _chatBadgeUnsubs[id]();
+    delete _chatBadgeUnsubs[id];
   });
 }
 
@@ -2799,6 +2884,7 @@ let currentChatCaseId = null;
 
 function openChatModal(caseId, title) {
   currentChatCaseId = caseId;
+  markChatRead(caseId); // 開いた瞬間に既読にする
   document.getElementById('chat-modal-title').textContent = `💬 ${title}`;
   document.getElementById('chat-messages').innerHTML =
     `<div style="color:var(--text2);font-size:12px;text-align:center;">読み込み中...</div>`;
