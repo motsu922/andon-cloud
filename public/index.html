@@ -1343,6 +1343,7 @@ const fn = {
   deleteMember:     functions.httpsCallableFromURL('https://deletemember-svesbeblda-an.a.run.app'),
   registerFCMToken: functions.httpsCallableFromURL('https://registerfcmtoken-svesbeblda-an.a.run.app'),
   initTenant:       functions.httpsCallableFromURL('https://inittenant-svesbeblda-an.a.run.app'),
+  uploadCasePhoto:  functions.httpsCallableFromURL('https://uploadcasephoto-svesbeblda-an.a.run.app'),
 };
 
 let messaging = null;
@@ -1862,23 +1863,27 @@ function callGoStep(step) {
 async function handlePhotoSelect(input) {
   const file = input.files[0];
   if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('画像ファイルを選択してください'); input.value = ''; return; }
+  if (file.size > 10 * 1024 * 1024) { showToast('10MB以下の画像を選択してください'); input.value = ''; return; }
 
-  // プレビュー表示
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('photo-preview').src = e.target.result;
-    document.getElementById('photo-preview-wrap').style.display = 'block';
-  };
-  reader.readAsDataURL(file);
+  // プレビュー表示（ローカル）
+  const previewUrl = URL.createObjectURL(file);
+  document.getElementById('photo-preview').src = previewUrl;
+  document.getElementById('photo-preview-wrap').style.display = 'block';
 
-  // Storage へアップロード
+  // Cloud Function 経由でアップロード（CORS・Tracking Prevention を回避）
   document.getElementById('photo-upload-progress').style.display = 'block';
+  document.getElementById('photo-upload-progress').textContent = 'アップロード中...';
   document.getElementById('photo-upload-label').style.display = 'none';
   try {
-    const path = `tenants/${tenantId}/cases/${Date.now()}_${file.name}`;
-    const ref = storage.ref(path);
-    await ref.put(file);
-    uploadedPhotoURL = await ref.getDownloadURL();
+    const base64 = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = e => resolve(e.target.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const result = await fn.uploadCasePhoto({ tenantId, photoBase64: base64, mimeType: file.type });
+    uploadedPhotoURL = result.data.photoURL;
     document.getElementById('photo-upload-progress').textContent = '✅ アップロード完了';
   } catch (e) {
     console.error(e);
@@ -1907,7 +1912,7 @@ async function submitCall() {
   const memo = document.getElementById('call-memo').value.trim();
 
   try {
-    await fn.createCase({
+    const result = await fn.createCase({
       tenantId,
       processId:      selectedProcess.id,
       callTypeName:   selectedCallType.name,

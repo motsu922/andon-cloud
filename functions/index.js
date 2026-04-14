@@ -10,6 +10,7 @@ const { initializeApp }      = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging }       = require("firebase-admin/messaging");
 const { getAuth }            = require("firebase-admin/auth");
+const { getStorage }         = require("firebase-admin/storage");
 
 initializeApp();
 const db  = getFirestore();
@@ -516,6 +517,35 @@ exports.superCreateTenant = onCall({ region: "asia-northeast1" }, async (req) =>
   }
 
   return { ok: true, tenantId, adminUid: userRecord.uid };
+});
+
+// =============================================
+// 15. 写真アップロード（CORS・Tracking Preventionを回避）
+// =============================================
+exports.uploadCasePhoto = onCall({ region: "asia-northeast1" }, async (req) => {
+  await assertMember(req.auth, req.data.tenantId);
+
+  const { tenantId, photoBase64, mimeType } = req.data;
+  if (!photoBase64) throw new HttpsError("invalid-argument", "photoBase64 is required");
+
+  // base64 ヘッダ除去
+  const base64Data = photoBase64.replace(/^data:[^;]+;base64,/, "");
+  const buffer = Buffer.from(base64Data, "base64");
+
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new HttpsError("invalid-argument", "10MB以下の画像を選択してください");
+  }
+
+  const ext = (mimeType || "image/jpeg").split("/")[1] || "jpg";
+  const fileName = `tenants/${tenantId}/cases/${Date.now()}_${req.auth.uid.substring(0, 6)}.${ext}`;
+
+  const bucket = getStorage().bucket();
+  const file = bucket.file(fileName);
+  await file.save(buffer, { metadata: { contentType: mimeType || "image/jpeg" } });
+  await file.makePublic();
+
+  const photoURL = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+  return { photoURL };
 });
 
 // =============================================
