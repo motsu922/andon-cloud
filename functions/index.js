@@ -525,7 +525,7 @@ exports.superCreateTenant = onCall({ region: "asia-northeast1" }, async (req) =>
 
 // Firebase Storage REST API は Firebase Auth IDトークンが必要
 // Admin SDK のカスタムトークン → IDトークン変換を使う
-const STORAGE_BUCKET   = "kouki-e7805.firebasestorage.app";
+const STORAGE_BUCKET   = "kouki-e7805.firebasestorage.app"; // 新世代バケット
 const FIREBASE_API_KEY = "AIzaSyAJl87Z7mQNHCAJJ11HQC4BiJltF1ddUzk";
 let _cachedIdToken = null;
 let _tokenExpiry   = 0;
